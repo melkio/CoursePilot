@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/DotNetTemplate.slnx"
+                "${workspaceFolder}/CoursePilot.slnx"
             ],
             "problemMatcher": "$msCompile"
         },
@@ -17,7 +17,7 @@
             "type": "process",
             "args": [
                 "test",
-                "${workspaceFolder}/DotNetTemplate.slnx",
+                "${workspaceFolder}/CoursePilot.slnx",
             ],
             "problemMatcher": "$msCompile",
             "group": "test"

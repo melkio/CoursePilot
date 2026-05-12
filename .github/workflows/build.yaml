@@ -17,8 +17,6 @@ jobs:
       with:
         dotnet-version: '8.0.x'
         dotnet-quality: 'ga'
-    - name: Configure nuget feed
-      run: dotnet nuget add source "https://nuget.pkg.github.com/CodicePlastico/index.json" --store-password-in-clear-text -u mrs-developer -p ${{ secrets.REGISTRY_TOKEN }} -n github 
     - name: Build
       run: |
         dotnet build --configuration Release
