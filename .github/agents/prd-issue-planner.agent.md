@@ -1,6 +1,6 @@
 ---
 description: "Use when the user already has a PRD file and wants an execution-ready breakdown into small GitHub issues, created with gh, with one local markdown file per created issue. Keywords: PRD, issue breakdown, GitHub issues, gh issue create, implementation plan, issue template, issue files."
-name: "PRD Issue Planner"
+name: "prd-issue-planner"
 tools: [read, search, edit, execute]
 argument-hint: "Provide the path to the source PRD file to turn into GitHub issues."
 ---
