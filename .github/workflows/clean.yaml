@@ -1,0 +1,33 @@
+name: Remove oldest docker images
+
+on:
+  schedule:
+    - cron: "0 0,12 * * *"
+
+env:
+  ORGANIZATION: codiceplastico
+  PACKAGE_NAME: dotnet-template
+  MAX_IMAGES: 3
+  
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean untagged images
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ env.ORGANIZATION }}
+          package-name: ${{ env.PACKAGE_NAME }}
+          package-type: container
+          min-versions-to-keep: 0
+          delete-only-untagged-versions: 'true'
+
+      - name: Keep only latest images
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ env.ORGANIZATION }}
+          package-name: ${{ env.PACKAGE_NAME }}
+          package-type: container
+          min-versions-to-keep: ${{ env.MAX_IMAGES }}
+
+            
