@@ -1,6 +1,6 @@
 ---
+name: "dotnet-coder"
 description: "Use when the user wants to implement an existing GitHub issue (identified by its issue number) in this .NET solution, applying .NET framework best practices and widely recognized design patterns. Keywords: implement issue, work on issue, gh issue, .NET implementation, dotnet feature, design patterns, SOLID, clean architecture, issue number, take in charge issue."
-name: "coder"
 tools: [read, search, edit, execute, todo]
 argument-hint: "Provide the GitHub issue number to implement (e.g. 42)."
 ---

@@ -2,6 +2,7 @@
 name: create-gh-issue
 description: "Create a single GitHub issue via the GitHub CLI and persist a local markdown file for it. Use when any agent needs to: create a GitHub issue from a structured title and body, apply labels, capture the assigned issue number, and write a local tracking file named <issue-number>.md inside a target folder. Keywords: gh issue create, create GitHub issue, local issue file, issue number, ready label, issue tracking."
 argument-hint: "Title, body, target local folder, and optional extra labels for the issue to create."
+user-invocable: false
 ---
 
 # Create GitHub Issue

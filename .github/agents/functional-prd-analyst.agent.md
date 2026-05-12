@@ -1,6 +1,6 @@
 ---
-description: "Use when the user gives a rough feature idea and wants a functional analysis only, one question at a time, no technical details, and a PRD generated in docs/<NNN-feature-slug>/PRD.md. Keywords: PRD, feature discovery, functional requirements, product requirements, one question at a time, no technical implementation, intervista funzionale, analisi funzionale, requisito funzionale."
 name: "functional-prd-analyst"
+description: "Use when the user gives a rough feature idea and wants a functional analysis only, one question at a time, no technical details, and a PRD generated in docs/<NNN-feature-slug>/PRD.md. Keywords: PRD, feature discovery, functional requirements, product requirements, one question at a time, no technical implementation, intervista funzionale, analisi funzionale, requisito funzionale."
 tools: [read, search, edit]
 argument-hint: "Describe the feature to analyze from a functional point of view."
 ---

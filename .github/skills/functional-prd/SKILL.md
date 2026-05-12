@@ -2,6 +2,7 @@
 name: functional-prd
 description: "Run a structured functional discovery interview one question at a time, then generate a PRD in docs/<NNN-feature-slug>/PRD.md. Use for feature analysis, product requirements, PRD generation, functional requirements discovery, intervista funzionale, analisi funzionale, requisito funzionale. No technical details, no source code changes."
 argument-hint: "Describe the feature to analyze from a functional point of view."
+user-invocable: false
 ---
 # Functional PRD Discovery
 
