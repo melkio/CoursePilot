@@ -5,14 +5,14 @@
             // Use IntelliSense to find out which attributes exist for C# debugging
             // Use hover for the description of the existing attributes
             // For further information visit https://github.com/dotnet/vscode-csharp/blob/main/debugger-launchjson.md.
-            "name": "DotNetTemplate.Host (run)",
+            "name": "CoursePilot.Host (run)",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/src/DotNetTemplate.Host/bin/Debug/net8.0/DotNetTemplate.Host.dll",
+            "program": "${workspaceFolder}/src/CoursePilot.Host/bin/Debug/net8.0/CoursePilot.Host.dll",
             "args": [],
-            "cwd": "${workspaceFolder}/src/DotNetTemplate.Host",
+            "cwd": "${workspaceFolder}/src/CoursePilot.Host",
             "stopAtEntry": false,
             // Enable launching a web browser when ASP.NET Core starts. For more information: https://aka.ms/VSCode-CS-LaunchJson-WebBrowser
             "serverReadyAction": {

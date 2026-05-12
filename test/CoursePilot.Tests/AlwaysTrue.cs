@@ -1,4 +1,4 @@
-namespace DotNetTemplate.Tests;
+namespace CoursePilot.Tests;
 
 public class Tests
 {

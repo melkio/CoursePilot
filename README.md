@@ -1,15 +1,15 @@
-# DotNetTemplate
+# CoursePilot
 
 A GitHub template repository for bootstrapping new .NET solutions with a ready-to-use project layout, build/test workflows and Docker packaging.
 
 ## What's inside
 
-- `src/DotNetTemplate.Host/` — the application host project.
-- `test/DotNetTemplate.Tests/` — the xUnit test project.
-- `DotNetTemplate.slnx` — the solution file.
+- `src/CoursePilot.Host/` — the application host project.
+- `test/CoursePilot.Tests/` — the xUnit test project.
+- `CoursePilot.slnx` — the solution file.
 - `Dockerfile` — multi-stage build for the host project.
 - `.github/workflows/` — CI workflows (build, artifacts, clean-up).
-- `rename-template.sh` — one-shot script that replaces every `DotNetTemplate` / `dotnet-template` occurrence with your project name.
+- `rename-template.sh` — one-shot script that replaces every `CoursePilot` / `coursepilot` occurrence with your project name.
 
 ## How to bootstrap a new project from this template
 
@@ -35,6 +35,6 @@ Then open a Pull Request from the pushed branch.
 ## Build and test
 
 ```bash
-dotnet build DotNetTemplate.slnx
-dotnet test  DotNetTemplate.slnx
+dotnet build CoursePilot.slnx
+dotnet test  CoursePilot.slnx
 ```

@@ -5,8 +5,8 @@ on:
     - cron: "0 0,12 * * *"
 
 env:
-  ORGANIZATION: codiceplastico
-  PACKAGE_NAME: dotnet-template
+  ORGANIZATION: melkio
+  PACKAGE_NAME: coursepilot
   MAX_IMAGES: 3
   
 jobs:

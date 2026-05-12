@@ -9,7 +9,7 @@ on:
 
 env:
   CONTAINER_REGISTRY_URL: ghcr.io
-  IMAGE_NAME: codiceplastico/dotnet-template
+  IMAGE_NAME: melkio/coursepilot
 
 jobs:
   setup:

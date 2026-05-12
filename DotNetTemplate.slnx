@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/DotNetTemplate.Host/DotNetTemplate.Host.csproj" />
-  </Folder>
-  <Folder Name="/test/">
-    <Project Path="test/DotNetTemplate.Tests/DotNetTemplate.Tests.csproj" />
-  </Folder>
-</Solution>
