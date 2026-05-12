@@ -44,9 +44,6 @@ jobs:
       with:
         context: .
         file: Dockerfile
-        build-args: |
-          NUGET_USERNAME=mrs-developer
-          NUGET_PASSWORD=${{ secrets.REGISTRY_TOKEN }}
         tags: "${{ env.CONTAINER_REGISTRY_URL }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
         push: true
 
