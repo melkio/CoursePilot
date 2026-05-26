@@ -35,8 +35,7 @@ If the input is missing or not numeric, stop and ask for it.
 2. Fetch the issue:
    - `gh issue view <issue-number> --json number,title,body,labels,state,url`
 3. If the issue does not exist, is closed, or is missing the `ready` label, stop and report the situation before doing anything else.
-4. Look for a matching local tracking file such as `docs/**/issues/<issue-number>.md` and read it if present.
-5. If the issue references a PRD path, read that PRD file for context.
+4. If the issue references a PRD path, read that PRD file for context.
 
 ### Step 2 — Understand the codebase impact
 1. Inspect the solution layout: `CoursePilot.slnx`, `src/`, `test/`.
