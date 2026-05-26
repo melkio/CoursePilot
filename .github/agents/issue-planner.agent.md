@@ -14,7 +14,7 @@ Your job is to read a PRD file, derive a small set of coherent implementation is
 - Do not create issues in any tracker other than GitHub.
 - Use English for every issue title and every issue body.
 - Add the `ready` label to every created GitHub issue.
-- Every issue body MUST follow the template at [issue-planner.assets/issue-template.md](./issue-planner.assets/issue-template.md). All sections are required; do not omit any heading.
+- Every issue body MUST follow the template at [assets/issue-template.md](./assets/issue-template.md). All sections are required; do not omit any heading.
 - Every issue MUST trace back to the source PRD via the `PRD Traceability` section (path + section/requirement reference).
 - Keep the breakdown pragmatic: issues must be small, independently actionable, and each acceptance criterion must be an observable outcome.
 
@@ -39,7 +39,7 @@ Before creating any GitHub issue, show the user the planned issue titles and ask
 
 ### Step 4 — Create each issue via the `github-cli` skill
 For every issue in the plan, in order:
-1. Render the issue body by filling every section of [issue-planner.assets/issue-template.md](./issue-planner.assets/issue-template.md) with PRD-derived content. Validate that no heading is left empty before proceeding.
+1. Render the issue body by filling every section of [assets/issue-template.md](./assets/issue-template.md) with PRD-derived content. Validate that no heading is left empty before proceeding.
 2. Load and follow the `github-cli` skill to run `gh issue create` with:
    - `title`: the prepared issue title
    - `body`: the rendered issue body

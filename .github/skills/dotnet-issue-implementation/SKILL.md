@@ -1,6 +1,6 @@
 ---
 name: dotnet-issue-implementation
-description: "Implement one existing GitHub issue by issue number in this .NET solution, following .NET best practices and recognized design patterns. Use for: implement issue, work on issue, gh issue, dotnet feature, clean architecture, SOLID, issue number, acceptance criteria, build and test verification."
+description: "Implement one existing GitHub issue by issue number in this .NET solution, following the codebase's hexagonal module conventions, build/test/format commands, run modes, e2e validation (health + Swagger), and coding/naming conventions. Use for: implement issue, work on issue, gh issue, dotnet feature, hexagonal module, Icaro, build and test verification, dotnet format, Swagger, health check, naming conventions, test naming."
 argument-hint: "Provide the GitHub issue number to implement (e.g. 42)."
 user-invocable: false
 ---
@@ -36,6 +36,7 @@ If the input is missing or not numeric, stop and ask for it.
    - `gh issue view <issue-number> --json number,title,body,labels,state,url`
 3. If the issue does not exist, is closed, or is missing the `ready` label, stop and report the situation before doing anything else.
 4. If the issue references a PRD path, read that PRD file for context.
+5. If the issue has an architecture comment posted by the `architect` agent, treat it as the authoritative technical design and follow it.
 
 ### Step 2 — Understand the codebase impact
 1. Inspect the solution layout: `CoursePilot.slnx`, `src/`, `test/`.
@@ -54,6 +55,8 @@ The plan must include:
 Keep the plan minimal: one todo per acceptance criterion or per cohesive change.
 
 ### Step 4 — Implement
+Load and follow the `hexagonal-module-design` skill for the codebase's module layout, naming, `Resource<T>` pattern, repository/service/notifier triad, Mongo adapter triplet, transports, CRUD vs Command choice, and DI conventions. The architecture comment on the issue (if present) takes precedence.
+
 Apply these .NET conventions consistently:
 - Respect the existing SDK style, `Nullable`, `ImplicitUsings`, target framework, and folder layout.
 - Follow Microsoft naming guidelines.
@@ -83,10 +86,47 @@ Apply design patterns only when they fit naturally:
 
 ### Step 6 — Verify
 Run, in order, and stop on first failure:
-1. `dotnet build CoursePilot.slnx`
-2. `dotnet test CoursePilot.slnx`
+1. `dotnet restore`
+2. `dotnet build CoursePilot.slnx --configuration Release`
+3. `dotnet test CoursePilot.slnx --configuration Release --no-build`
+4. `dotnet format --verify-no-changes` (run `dotnet format` if it reports changes, then rerun)
 
-If either fails, fix and rerun until both succeed.
+The build must succeed with **zero warnings** in Release. If any step fails, fix and rerun until all four succeed.
+
+### Step 6b — End-to-end validation
+Before reporting completion, run the relevant e2e scenarios for any change that touches the Host:
+
+1. **Production mode** (default):
+   ```bash
+   dotnet run --project src/CoursePilot.Host --configuration Release
+   # App listens on http://localhost:5000
+   # Swagger UI is NOT available in production mode
+   ```
+   Health check:
+   ```bash
+   curl http://localhost:5000/health
+   # Expected: HTTP 200 with "Healthy" response
+   ```
+2. **Development mode** (Swagger enabled):
+   ```bash
+   ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/CoursePilot.Host
+   # Swagger UI: http://localhost:5000/swagger
+   ```
+   OpenAPI document:
+   ```bash
+   curl http://localhost:5000/swagger/v1/swagger.json
+   # Expected: valid OpenAPI JSON
+   ```
+3. **Full CI pipeline** (must all succeed):
+   ```bash
+   dotnet clean
+   dotnet restore
+   dotnet build --configuration Release
+   dotnet test --configuration Release --no-build
+   dotnet format --verify-no-changes
+   ```
+
+Stop the app between modes. If any scenario fails, fix and rerun the full sequence.
 
 ### Step 7 — Final report
 Return:
@@ -98,3 +138,32 @@ Return:
 - Suggested commit message in the form `feat(#<number>): <short description>` or similar
 
 If the issue is ambiguous, blocked by a missing dependency, or larger than declared, stop and report the blocker instead of guessing.
+
+## Coding Conventions
+
+### Private fields
+Use camelCase **without** underscore prefix:
+```csharp
+private readonly IUsersService usersService;
+```
+
+### DI parameter names
+Use the simplest, most generic name. Specialise only when there is a conflict.
+
+```csharp
+// Single dependency — simple name
+public class MyClass(IUsersService service) { ... }
+
+// Multiple dependencies — specialised names
+public class MyClass(IUsersService usersService, IRequestsService requestsService) { ... }
+```
+
+### Test project / class / method naming
+- Test project name = production project name + `.Tests` suffix (e.g., `CoursePilot.Host` → `CoursePilot.Host.Tests`).
+- Test class name = class under test + `.Tests` suffix.
+- Test method name pattern: `MethodUnderTest_Condition_ExpectedResult`.
+
+```csharp
+public void MethodUnderTest_WhenValueIsZero_ShouldThrow() { ... }
+public void MethodUnderTest_WhenValueIsGreaterThanZero_ShouldReturnFortyTwo() { ... }
+```

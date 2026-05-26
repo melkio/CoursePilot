@@ -1,7 +1,7 @@
 ---
 name: github-cli
-description: "Thin wrapper around the GitHub CLI (`gh`). Invoke this skill whenever any agent needs to run a `gh` command. Currently documents `gh issue create`. Keywords: gh, GitHub CLI, gh issue create, create GitHub issue, ready label, issue number."
-argument-hint: "Pick the gh operation to run (today: issue-create) and pass its required parameters."
+description: "Thin wrapper around the GitHub CLI (`gh`). Invoke this skill whenever any agent needs to run a `gh` command. Documents: gh issue create, gh issue view, gh issue comment. Keywords: gh, GitHub CLI, gh issue create, gh issue view, gh issue comment, create GitHub issue, fetch issue, post comment, ready label, issue number."
+argument-hint: "Pick the gh operation to run (issue-create, issue-view, issue-comment) and pass its required parameters."
 user-invocable: false
 ---
 
@@ -64,3 +64,69 @@ Return exactly:
 | Temp body-file write fails | Stop. Report the OS error and the path |
 | `gh issue create` fails | Stop. Report the command exit code and stderr; still remove the temp file |
 | URL parsing fails | Stop. Report the raw `gh` output |
+
+---
+
+### `gh issue view`
+
+#### Inputs
+- `issue-number` (integer, required): the issue to fetch.
+- `fields` (list of strings, optional): JSON fields to include. Defaults to `title,body,labels,comments`.
+
+#### Procedure
+1. **Run the command:**
+   ```bash
+   gh issue view <issue-number> --json <comma-separated-fields>
+   ```
+   Default fields when none are specified: `title,body,labels,comments`.
+2. **Parse the JSON output** and return it as-is to the caller.
+
+#### Output
+Return the parsed JSON object. Example shape:
+```json
+{
+  "title": "...",
+  "body": "...",
+  "labels": [{"name": "..."}],
+  "comments": [{"body": "...", "author": {"login": "..."}}]
+}
+```
+
+#### Failure Handling
+| Condition | Action |
+|-----------|--------|
+| Issue not found | Stop. Report the `gh` stderr (issue number may be wrong) |
+| `gh issue view` fails | Stop. Report the command exit code and stderr |
+
+---
+
+### `gh issue comment`
+
+#### Inputs
+- `issue-number` (integer, required): the issue to comment on.
+- `body` (string, required): full markdown body of the comment as provided by the caller.
+
+#### Procedure
+1. **Write the body to a temporary file:**
+   ```
+   /tmp/gh-issue-comment-<issue-number>-<unique-suffix>.md
+   ```
+2. **Run the command:**
+   ```bash
+   gh issue comment <issue-number> --body-file "/tmp/gh-issue-comment-<issue-number>-<unique-suffix>.md"
+   ```
+3. **Parse the output.** On success, `gh issue comment` prints the URL of the new comment.
+4. **Remove the temporary file** even if the command failed.
+
+#### Output
+Return exactly:
+```
+{ "comment-url": "<full GitHub comment URL>" }
+```
+
+#### Failure Handling
+| Condition | Action |
+|-----------|--------|
+| Issue not found | Stop. Report the `gh` stderr |
+| Temp file write fails | Stop. Report the OS error and the path |
+| `gh issue comment` fails | Stop. Report the command exit code and stderr; still remove the temp file |
