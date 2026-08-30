@@ -53,7 +53,7 @@ safe-outputs:
   update-issue:
     body:
     max: 1
-    target: triggering
+    target: "*"
 
   add-labels:
     allowed: ["discovery approved"]
