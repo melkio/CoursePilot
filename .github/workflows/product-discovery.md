@@ -98,6 +98,8 @@ Important implementation rules:
 - Keep the complete conversation in normal issue comments.
 - Keep the current structured state in the issue body using `update_issue` with
   `operation: replace-island`. Never replace the human-authored issue body.
+- When calling `update_issue`, always pass the live issue number and only update
+  an issue that still has `discovery-enabled`.
 - Use one agent comment per turn at most.
 - On approval, finalize the snapshot, add `discovery approved`, and remove both
   `approve-discovery` and `discovery-enabled`.
