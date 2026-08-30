@@ -53,6 +53,7 @@ safe-outputs:
   update-issue:
     body:
     max: 1
+    required-labels: ["discovery-enabled"]
     target: "*"
 
   add-labels:
