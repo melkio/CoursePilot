@@ -79,7 +79,7 @@ If an approved snapshot already exists and `discovery enabled` is newly applied:
 1. increment the revision;
 2. change status to `IN PROGRESS`;
 3. preserve previous decisions as historical context, but allow them to be challenged;
-4. remove the `discovery approved` label;
+4. remove the `discovery-approved` label;
 5. resume interviewing from the new/changed context.
 
 If an in-progress snapshot already exists and an `assigned` event adds another
@@ -126,7 +126,7 @@ If the actor **is** an assignee:
 6. Record the approving actor and approval time from the activation context when available.
 7. Update the Snapshot using `replace-island`.
 8. Post a concise approval summary, including the number of unresolved material questions.
-9. Add label `discovery approved`.
+9. Add label `discovery-approved`.
 10. Remove labels `approve-discovery` and `discovery enabled`.
 
 Human approval wins over agent readiness. Approval is allowed even when readiness is

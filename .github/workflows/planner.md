@@ -11,8 +11,8 @@ on:
 
 if: >-
   github.event.issue.pull_request == null &&
-  github.event.label.name == 'discovery approved' &&
-  contains(github.event.issue.labels.*.name, 'discovery approved')
+  github.event.label.name == 'discovery-approved' &&
+  contains(github.event.issue.labels.*.name, 'discovery-approved')
 
 concurrency:
   group: planner-${{ github.event.issue.number }}
@@ -54,7 +54,7 @@ safe-outputs:
     max: 1
 
   remove-labels:
-    allowed: ["discovery approved"]
+    allowed: ["discovery-approved"]
     max: 1
 ---
 
@@ -64,16 +64,16 @@ Run the **planner** skill for issue #${{ github.event.issue.number }}.
 
 Treat the event only as an activation hint. Re-read the live issue, its labels and
 body, and its native sub-issues before acting. Do not act when the live issue is a
-pull request or no longer has `discovery approved`; call `noop` instead.
+pull request or no longer has `discovery-approved`; call `noop` instead.
 
 Current activation context:
 
 - event: `${{ github.event_name }}`
-- label: `discovery approved`
+- label: `discovery-approved`
 - actor: `${{ github.actor }}`
 - issue number: `${{ github.event.issue.number }}`
 
 Use only the configured safe outputs. In particular, link every created child to the
 triggering issue with `link_sub_issue`, leave it unassigned, and do not use direct
 GitHub writes. After a successful plan or re-plan, add `planned` and remove
-`discovery approved`.
+`discovery-approved`.

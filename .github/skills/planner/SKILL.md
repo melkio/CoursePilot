@@ -17,7 +17,7 @@ Before every action, read the live triggering issue and its complete body, then 
 all of its native sub-issues. Plan only if all are true:
 
 - it is an issue, not a pull request;
-- it currently has the `discovery approved` label; and
+- it currently has the `discovery-approved` label; and
 - its body contains a Discovery Snapshot with status `APPROVED`.
 
 Treat the Discovery Snapshot and the native sub-issue hierarchy as the source of
@@ -39,7 +39,7 @@ met, call `noop` with a short reason and make no visible write.
    re-plan, add only genuinely new uncovered work; do not rewrite, close, reassign,
    or unlink existing children.
 
-The workflow removes `discovery approved` after every successful run. Therefore a
+The workflow removes `discovery-approved` after every successful run. Therefore a
 new application of that label after a completed run is a new planning cycle. Record
 the incremented cycle number in the Planning Snapshot. Queued or stale events are
 safe because the live label check fails after the first run removes the label.
@@ -120,7 +120,7 @@ last-processed-label-cycle: <same cycle number>
 
 Then post one concise summary stating whether this was the first plan or a re-plan,
 which new children were created, and which existing children were retained. Finally,
-add `planned` and remove `discovery approved`.
+add `planned` and remove `discovery-approved`.
 
 If reconciliation finds no new work on a re-plan, still update the Planning Snapshot
 for the new cycle, post the concise summary, and perform the same label transition.
