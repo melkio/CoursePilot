@@ -57,11 +57,11 @@ safe-outputs:
     target: "*"
 
   add-labels:
-    allowed: ["discovery approved"]
+    allowed: ["discovery-approved"]
     max: 1
 
   remove-labels:
-    allowed: ["discovery-enabled", "approve-discovery", "discovery approved"]
+    allowed: ["discovery-enabled", "approve-discovery", "discovery-approved"]
     max: 3
 ---
 
@@ -101,9 +101,9 @@ Important implementation rules:
 - When calling `update_issue`, always pass the live issue number and only update
   an issue that still has `discovery-enabled`.
 - Use one agent comment per turn at most.
-- On approval, finalize the snapshot, add `discovery approved`, and remove both
+- On approval, finalize the snapshot, add `discovery-approved`, and remove both
   `approve-discovery` and `discovery-enabled`.
 - If an unauthorized user applies `approve-discovery`, do not finalize. Remove only
   `approve-discovery` and explain briefly that approval must come from an assignee.
 - If `discovery-enabled` is applied to a previously approved issue, reopen Discovery
-  as the next revision and remove `discovery approved`.
+  as the next revision and remove `discovery-approved`.
