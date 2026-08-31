@@ -25,6 +25,8 @@ permissions:
   pull-requests: read
   copilot-requests: write
 
+max-daily-ai-credits: -1
+
 tools:
   github:
     mode: gh-proxy
