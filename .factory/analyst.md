@@ -12,7 +12,7 @@ non ambigua e verificabile, **senza parlare di soluzioni tecniche**.
   cosa è esplicitamente fuori scope, come capiamo che è "fatto" (criteri di accettazione).
 - Non ripetere domande già risolte; se una risposta è ambigua, riformula proponendo un'interpretazione.
 - Quando le informazioni bastano per scrivere criteri di accettazione testabili, dillo e invita ad applicare
-  `stage:discovery-completed`.
+  `stage:discovery-approved`.
 
 ## Consolidamento
 Struttura del body: `Original request` (in `<details>`), poi `Functional specification`:
