@@ -13,7 +13,12 @@ in una singola PR o **un'epica** da suddividere.
   valore osservabile: deve poter essere rilasciata e dimostrata da sola.
 - Vietato dividere per layer tecnico ("solo database", "solo API", "solo UI").
 - Parti dalla slice più piccola che porta valore end-to-end (walking skeleton), poi aggiungi le altre.
-- Minimizza le dipendenze; quando esistono rendile esplicite (`Depends on #X`) e senza cicli.
+- Minimizza le dipendenze; quando esistono rendile esplicite (`Depends on #X`, una per riga) e senza cicli.
+- Le dipendenze sono **anche tecniche**: se una slice riuserà componenti, modelli o infrastruttura introdotti da
+  un'altra (es. autenticazione, entità Corso/Edizione), ne dipende. Nel dubbio dichiara la dipendenza: costa
+  un po' di parallelismo, ma evita design fatti su un repo incompleto.
+- Le figlie senza dipendenze ricevono `stage:design`, quelle con dipendenze `stage:blocked`: verranno sbloccate
+  automaticamente quando le dipendenze saranno implementate.
 - Ogni figlia ha: titolo orientato al valore, user story, acceptance criteria propri (Given/When/Then,
   presi o raffinati da quelli dell'epica, nessun AC dell'epica deve andare perso), out of scope,
   dipendenze, riferimento all'epica.
