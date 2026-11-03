@@ -53,5 +53,8 @@ Il design tecnico di una feature deve basarsi sul codice che le sue dipendenze a
 
 ## File
 
+- `../.github/skills/` — skill del team con le convenzioni di progettazione (es. `hexagonal-module-design`),
+  usate dall'architect per il design, da Copilot per l'implementazione e dal reviewer per la verifica.
+
 - `analyst.md`, `product-manager.md`, `architect.md`, `reviewer.md`, `lessons.md` — prompt dei ruoli (modificabili via PR).
 - `../.github/copilot-instructions.md` — regole di coding lette da Copilot, aggiornate dalla fase *lessons*.
