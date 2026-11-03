@@ -36,6 +36,7 @@ riproducibile fuori da GitHub: GitHub è solo lo storage.
 
 1. `stage:ready` → il developer crea `feat/<n>-<slug>`, implementa il piano, esegue `dotnet build` e `dotnet test`
    finché sono verdi e apre la PR (`Fixes #n`, mappa criterio di accettazione → test).
+   Una PR `[WIP]` senza blocco esterno dichiarato viene ripresa automaticamente dal developer finché non è completa.
 2. `stage:review` sulla PR → review avversariale (modello diverso da chi ha scritto il codice).
 3. `stage:fix` sulla PR → il developer corregge i finding sullo stesso branch, risponde punto per punto e riporta
    la PR in `stage:review`: il reviewer rivede il nuovo commit. Il ciclo si ripete finché serve.
