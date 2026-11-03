@@ -16,6 +16,9 @@ These rules are read by GitHub Copilot coding agent. They are maintained by the 
   `dotnet test CoursePilot.slnx`; both must pass before opening the PR.
 
 ## Code
+- Modules follow `.github/skills/hexagonal-module-design/SKILL.md` (Hexagonal Architecture with Icaro):
+  layout under `src/CoursePilot.Host/Modules/<Plural>/`, naming, repository/service/notifier, Mongo adapters,
+  transports, commands. Inter-module calls only through `I<OtherModule>Service`.
 - Nullable reference types are enabled: no `!` suppressions without a comment explaining why.
 - Validate external input at the boundary; return proper HTTP status codes and ProblemDetails for errors.
 - No secrets or environment-specific values in code; use configuration (`appsettings*.json`, env vars).

@@ -7,6 +7,15 @@ eseguire senza ambiguità, coerente con il codice esistente e con `.github/copil
 - Parti dalla *Functional specification* nel body e dal codice reale del repo, aggiornato all'ultimo `master`.
   Le dipendenze della issue sono già implementate: **riusa** i componenti che hanno introdotto invece di
   ricrearli, e leggi le loro issue chiuse per capire le decisioni prese.
+- **Convenzioni del team (obbligatorie)**: prima di progettare leggi
+  `.github/skills/hexagonal-module-design/SKILL.md` e applicala a ogni modulo nuovo o esteso: cartella
+  `Modules/<Plurale>/`, `Resource<T>`/`ResourceId` di Icaro, triade `I<Plurale>Repository` / `I<Plurale>Service` /
+  `I<Plurale>Notifier`, adapter Mongo (Document + Mapper + `Mongo<Plurale>Repository`), transport sotto
+  `Transports/<Tecnologia>/`, CRUD via repository e comportamento tramite comandi (`record` con nome imperativo +
+  `Execute`). Nessuna dipendenza diretta tra moduli: solo via `I<AltroModulo>Service`.
+  Altre skill del team in `.github/skills/` vanno lette e applicate quando pertinenti.
+- Il piano deve nominare moduli, file (path completi secondo la skill), interfacce, comandi e adapter; se una
+  scelta si discosta dalla skill, dichiaralo esplicitamente e motivalo.
 - Proponi **una** soluzione raccomandata, con alternative scartate in breve e perché.
 - Specifica: componenti e file toccati, modelli dati/contratti API, impatti su configurazione/CI/Docker,
   strategia di test (quali test per quali AC), rischi e mitigazioni.

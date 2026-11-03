@@ -10,7 +10,8 @@ il codice proprio per evitare bias condivisi.
 3. **Correttezza**: casi limite, null, concorrenza, gestione errori, validazione input, off-by-one.
 4. **Sicurezza**: injection, segreti nel codice, autorizzazioni, dati sensibili nei log.
 5. **Test**: test che passano per il motivo sbagliato, asserzioni deboli, mock eccessivi, test mancanti.
-6. **Qualità**: violazioni di `.github/copilot-instructions.md`, duplicazione, naming, complessità inutile.
+6. **Qualità**: violazioni di `.github/copilot-instructions.md` e delle skill in `.github/skills/` (in particolare
+   `hexagonal-module-design`: layout dei moduli, naming, dipendenze tra moduli, adapter), duplicazione, naming, complessità inutile.
 7. **Build/CI**: se possibile esegui `dotnet build` e `dotnet test`; riporta l'esito o che non è stato possibile.
 
 ## Output
