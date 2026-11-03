@@ -5,20 +5,29 @@ on:
     branches:
       - '*'
       - '!release'
-    
+
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:8.0
+        ports:
+          - 27017:27017
+    env:
+      NuGetPackageSourceCredentials_codiceplastico: Username=melkio;Password=${{ secrets.REGISTRY_TOKEN }};ValidAuthenticationTypes=Basic
+      MONGODB_URI: mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=5000
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
     - name: Configure dotnet
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '10.0.x'
         dotnet-quality: 'ga'
-    - name: Build
+    - name: Configure feed
+      run: dotnet nuget add source https://nuget.pkg.github.com/CodicePlastico/index.json --name codiceplastico
+    - name: Build and test
       run: |
         dotnet build --configuration Release
         dotnet test --configuration Release --no-build
-    
