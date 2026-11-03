@@ -45,6 +45,8 @@ jobs:
         context: .
         file: Dockerfile
         tags: "${{ env.CONTAINER_REGISTRY_URL }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
+        secrets: |
+          nuget_credentials=Username=melkio;Password=${{ secrets.REGISTRY_TOKEN }};ValidAuthenticationTypes=Basic
         push: true
 
   tag-and-release:
