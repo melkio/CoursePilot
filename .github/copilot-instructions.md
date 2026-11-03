@@ -1,6 +1,6 @@
 # Coding instructions for CoursePilot
 
-These rules are read by GitHub Copilot coding agent. They are maintained by the software factory
+These rules are read by the software factory developer agent (and by AI assistants in the IDE). They are maintained by the software factory
 (see `.factory/README.md`) and grow from review findings.
 
 ## Workflow

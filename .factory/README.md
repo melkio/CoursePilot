@@ -13,8 +13,9 @@ e avvia l'agente giusto.
 | Design | `type:feature` **e** `stage:design` | Architect · GPT-6.1 Sol | proposta tecnica nei commenti, iterativo |
 | Consolidamento tecnico | `stage:design-approved` | Architect | sezione *Tech details and plan* nel body + SHA di `master` su cui si basa il design |
 | Verifica del design | `stage:ready`, se `master` ha toccato file del piano dopo il design | Architect · GPT-6.1 Sol | piano aggiornato, oppure ritorno a `stage:design` |
-| Implementazione | `stage:ready` (design ancora valido) | Copilot coding agent · GPT-6.1 Terra | PR collegata alla issue |
-| Review | `stage:review` (sulla PR) | Reviewer avversariale · Claude Opus 5.5 | review con commenti inline |
+| Implementazione | `stage:ready` (design ancora valido) | Developer · GPT-6.1 Terra | branch `feat/<n>-<slug>`, build e test verdi, PR con `Fixes #n` |
+| Review | `stage:review` (sulla PR) | Reviewer avversariale · Claude Opus 5.5 | review con commenti inline (rieseguita a ogni nuovo commit) |
+| Fix | `stage:fix` (sulla PR) | Developer · GPT-6.1 Terra | commit di correzione, risposta finding per finding, label → `stage:review` |
 | Lessons learned | `stage:review-completed` (sulla PR) | Lessons · GPT-6.1 Sol | PR che aggiorna `.github/copilot-instructions.md` |
 
 ## Epiche e feature
@@ -27,6 +28,18 @@ Il product manager valuta se la issue è implementabile in una singola PR. Se è
 - il body dell'epica riporta la sezione `Linked issues` con l'ordine di implementazione.
 
 Le epiche non passano dal design.
+
+## Implementazione, review e fix
+
+L'implementazione è eseguita dal developer della factory (non da Copilot coding agent), così l'intero processo è
+riproducibile fuori da GitHub: GitHub è solo lo storage.
+
+1. `stage:ready` → il developer crea `feat/<n>-<slug>`, implementa il piano, esegue `dotnet build` e `dotnet test`
+   finché sono verdi e apre la PR (`Fixes #n`, mappa criterio di accettazione → test).
+2. `stage:review` sulla PR → review avversariale (modello diverso da chi ha scritto il codice).
+3. `stage:fix` sulla PR → il developer corregge i finding sullo stesso branch, risponde punto per punto e riporta
+   la PR in `stage:review`: il reviewer rivede il nuovo commit. Il ciclo si ripete finché serve.
+4. `stage:review-completed` → lessons learned; il merge resta manuale.
 
 ## Dipendenze e design sequenziale
 
@@ -42,7 +55,7 @@ Il design tecnico di una feature deve basarsi sul codice che le sue dipendenze a
 - Le feature indipendenti tra loro procedono in parallelo.
 - Il design registra lo SHA di `master` su cui è stato fatto. Se al momento di `stage:ready` su `master` sono
   arrivati commit che toccano file previsti dal piano, l'architect lo riverifica: se è ancora valido aggiorna lo
-  SHA e si procede con Copilot, altrimenti propone le modifiche e riporta la issue in `stage:design`.
+  SHA e si procede con l'implementazione, altrimenti propone le modifiche e riporta la issue in `stage:design`.
 
 ## Regole
 
@@ -54,7 +67,8 @@ Il design tecnico di una feature deve basarsi sul codice che le sue dipendenze a
 ## File
 
 - `../.github/skills/` — skill del team con le convenzioni di progettazione (es. `hexagonal-module-design`),
-  usate dall'architect per il design, da Copilot per l'implementazione e dal reviewer per la verifica.
+  usate dall'architect per il design, dal developer per l'implementazione e dal reviewer per la verifica.
 
 - `analyst.md`, `product-manager.md`, `architect.md`, `reviewer.md`, `lessons.md` — prompt dei ruoli (modificabili via PR).
-- `../.github/copilot-instructions.md` — regole di coding lette da Copilot, aggiornate dalla fase *lessons*.
+- `developer.md` — prompt del developer (implementazione e fix).
+- `../.github/copilot-instructions.md` — regole di coding lette dal developer (e dagli assistenti negli IDE), aggiornate dalla fase *lessons*.
