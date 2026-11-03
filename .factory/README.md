@@ -15,7 +15,7 @@ e avvia l'agente giusto.
 | Verifica del design | `stage:ready`, se `master` ha toccato file del piano dopo il design | Architect · GPT-6.1 Sol | piano aggiornato, oppure ritorno a `stage:design` |
 | Implementazione | `stage:ready` (design ancora valido) | Developer · GPT-6.1 Terra | branch `feat/<n>-<slug>`, build e test verdi, PR con `Fixes #n` |
 | Review | `stage:review` (sulla PR) | Reviewer avversariale · Claude Opus 5.5 | review con commenti inline (rieseguita a ogni nuovo commit) |
-| Fix | `stage:fix` (sulla PR) | Developer · GPT-6.1 Terra | commit di correzione, risposta finding per finding, label → `stage:review` |
+| Follow-up | commento con `/factory <istruzioni>` sulla PR | Developer · GPT-6.1 Terra | commit sullo stesso branch, risposta punto per punto |
 | Lessons learned | `stage:review-completed` (sulla PR) | Lessons · GPT-6.1 Sol | PR che aggiorna `.github/copilot-instructions.md` |
 
 ## Epiche e feature
@@ -37,8 +37,10 @@ riproducibile fuori da GitHub: GitHub è solo lo storage.
 1. `stage:ready` → il developer crea `feat/<n>-<slug>`, implementa il piano, esegue `dotnet build` e `dotnet test`
    finché sono verdi e apre la PR (`Fixes #n`, mappa criterio di accettazione → test).
 2. `stage:review` sulla PR → review avversariale (modello diverso da chi ha scritto il codice).
-3. `stage:fix` sulla PR → il developer corregge i finding sullo stesso branch, risponde punto per punto e riporta
-   la PR in `stage:review`: il reviewer rivede il nuovo commit. Il ciclo si ripete finché serve.
+3. `/factory <istruzioni>` in un commento sulla PR (conversazione, inline o review), come `@copilot` → il developer
+   esegue sullo stesso branch e risponde punto per punto. Il dispatcher mette 👀 sul commento quando lo prende in
+   carico e 🚀 quando ha finito. Se la PR è in `stage:review`, il reviewer rivede il nuovo commit.
+   Una PR `[WIP]` riporta in `## Remaining work` cosa manca: si riprende solo con un comando `/factory`.
 4. `stage:review-completed` → lessons learned; il merge resta manuale.
 
 ## Dipendenze e design sequenziale
