@@ -1,3 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 namespace CoursePilot.Host.Modules.Users.Transports.Http;
-public sealed record ChangeUserEmailModel([Required] string Email);
+public sealed class ChangeUserEmailModel
+{
+    [Required]
+    public string Email { get; set; } = string.Empty;
+}

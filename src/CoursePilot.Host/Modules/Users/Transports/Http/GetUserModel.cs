@@ -1,6 +1,22 @@
 using Icaro;
 namespace CoursePilot.Host.Modules.Users.Transports.Http;
-public sealed record GetUserModel(Guid Id, string Email, string Role, string? TeacherApprovalStatus, int Version)
+public sealed class GetUserModel
 {
-    public static GetUserModel From(ResourceContext context, User user) => new(user.Id.Value, user.Email, user.Role.ToString(), user.TeacherApprovalStatus?.ToString(), context.Version);
+    public Guid Id { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+    public string? TeacherApprovalStatus { get; set; }
+    public int Version { get; set; }
+
+    public static GetUserModel From(ResourceContext context, User user)
+    {
+        return new GetUserModel
+        {
+            Id = user.Id.Value,
+            Email = user.Email,
+            Role = user.Role.ToString(),
+            TeacherApprovalStatus = user.TeacherApprovalStatus?.ToString(),
+            Version = context.Version
+        };
+    }
 }

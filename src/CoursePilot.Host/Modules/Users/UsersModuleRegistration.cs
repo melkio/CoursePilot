@@ -1,3 +1,4 @@
+using Icaro;
 using CoursePilot.Host.Modules.Users.Identity;
 using CoursePilot.Host.Modules.Users.Mongo;
 using CoursePilot.Host.Modules.Users.Transports.Cli;
@@ -12,16 +13,19 @@ public static class UsersModuleRegistration
 {
     public static IServiceCollection AddUsersModule(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment environment)
     {
-        var mongoConnection = configuration["Mongo:ConnectionString"] ?? "mongodb://127.0.0.1:27017";
-        var databaseName = configuration["Mongo:Database"] ?? "CoursePilot";
-        services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoConnection));
-        services.AddSingleton(sp => sp.GetRequiredService<IMongoClient>().GetDatabase(databaseName));
-        services.AddSingleton<UserDocumentMapper>();
-        services.AddSingleton<IUsersRepository, MongoUsersRepository>();
+        services.AddMongo(options =>
+        {
+            configuration.GetSection(MongoOptions.DefaultSection).Bind(options);
+        });
+        services.AddSingleton<IMongoClient>(sp => sp.GetRequiredService<IMongoDatabase>().Client);
+        services.AddSingleton<Icaro.IDocumentMapper<User, UserDocument>, UserDocumentMapper>();
+        services.AddSingleton<MongoUsersRepository>();
+        services.AddSingleton<IUsersRepository, UsersRepositoryErrorTranslation>();
         services.AddSingleton<IUsersPasswordHasher, AspNetUsersPasswordHasher>();
         services.AddSingleton<IUsersNotifier, NullUsersNotifier>();
         services.AddScoped<IUsersService, UsersService>();
         services.AddSingleton<UsersMongoInitializer>();
+        services.Configure<BootstrapAdminOptions>(configuration.GetSection("BootstrapAdmin"));
         services.AddScoped<BootstrapAdminCommandHandler>();
         services.AddScoped<UsersCookieEvents>();
         services.AddScoped<IAuthorizationHandler, UsersAuthorizationHandler>();

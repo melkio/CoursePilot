@@ -11,7 +11,7 @@ public sealed class MongoUsersRepositoryTests
 {
     private MongoClient _client = null!; // Initialized by NUnit before each test.
     private IMongoDatabase _database = null!; // Initialized by NUnit before each test.
-    private MongoUsersRepository _repository = null!; // Initialized by NUnit before each test.
+    private IUsersRepository _repository = null!; // Initialized by NUnit before each test.
     private UsersService _service = null!; // Initialized by NUnit before each test.
     private string _name = string.Empty;
 
@@ -22,7 +22,7 @@ public sealed class MongoUsersRepositoryTests
         _name = "coursepilot_test_" + Guid.NewGuid().ToString("N");
         _database = _client.GetDatabase(_name);
         await new UsersMongoInitializer(_database).Initialize();
-        _repository = new MongoUsersRepository(_database, new UserDocumentMapper());
+        _repository = new UsersRepositoryErrorTranslation(new MongoUsersRepository(_database, new UserDocumentMapper()));
         _service = new UsersService(_repository, new AspNetUsersPasswordHasher(), new NullUsersNotifier());
     }
 
@@ -36,7 +36,7 @@ public sealed class MongoUsersRepositoryTests
     [Test]
     public async Task AC1_UniqueNormalizedEmailAndDocumentRoundTripSurviveNewRepository()
     {
-        var (_, user) = await _service.Execute(new RegisterUserCommand("Student@Example.it", "password123", UserRole.Student));
+        var (_, user) = await _service.ExecuteAndGet(new RegisterUserCommand("Student@Example.it", "password123", UserRole.Student));
         Assert.ThrowsAsync<UsersDuplicateEmailException>(() => _service.Execute(new RegisterUserCommand("student@example.IT", "password456", UserRole.Student)));
         var fresh = new MongoUsersRepository(_database, new UserDocumentMapper());
         var (context, loaded) = await fresh.Get(user.Id);
@@ -50,21 +50,21 @@ public sealed class MongoUsersRepositoryTests
     [Test]
     public async Task AC2_MongoVersionRejectsLostUpdateAndFiltersOnServer()
     {
-        var (_, admin) = await _service.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
-        var (context, teacher) = await _service.Execute(new RegisterUserCommand("teacher@example.it", "password123", UserRole.Teacher));
-        var (changedContext, _) = await _service.Execute(new ApproveTeacherCommand(admin.Id, teacher.Id, context.Version));
+        var (_, admin) = await _service.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
+        var (context, teacher) = await _service.ExecuteAndGet(new RegisterUserCommand("teacher@example.it", "password123", UserRole.Teacher));
+        var (changedContext, _) = await _service.ExecuteAndGet(new ApproveTeacherCommand(admin.Id, teacher.Id, context.Version));
         Assert.ThrowsAsync<UsersVersionException>(() => _repository.Upsert(teacher with { Role = UserRole.Student, TeacherApprovalStatus = null }, context.Version));
         var (current, loaded) = await _repository.Get(teacher.Id);
         Assert.That(current.Version, Is.EqualTo(changedContext.Version));
         Assert.That(loaded.TeacherApprovalStatus, Is.EqualTo(TeacherApprovalStatus.Approved));
-        var teachers = await _repository.List(0, 1, UserRole.Teacher, TeacherApprovalStatus.Approved);
+        var teachers = await _repository.Search(new UsersListQuery(0, 1, UserRole.Teacher, TeacherApprovalStatus.Approved));
         Assert.That(teachers.Select(x => x.User.Id), Is.EquivalentTo(new[] { teacher.Id }));
     }
 
     [Test]
     public async Task AC2_FilteredListIsPagedInMongo()
     {
-        var (_, admin) = await _service.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
+        var (_, admin) = await _service.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
         for (var i = 0; i < 3; i++)
             await _service.Execute(new RegisterUserCommand($"teacher{i}@example.it", "password123", UserRole.Teacher));
         await _service.Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
@@ -74,14 +74,19 @@ public sealed class MongoUsersRepositoryTests
         Assert.That(second.Count, Is.EqualTo(1));
         Assert.That(first.Select(x => x.User.Id).Intersect(second.Select(x => x.User.Id)), Is.Empty);
         Assert.That(first.Concat(second).All(x => x.User.Role == UserRole.Teacher && x.User.TeacherApprovalStatus == TeacherApprovalStatus.Pending), Is.True);
+        var all = await _service.List(admin.Id, 0, 3, UserRole.Teacher, TeacherApprovalStatus.Pending);
+        var unaligned = await _service.List(admin.Id, 1, 2, UserRole.Teacher, TeacherApprovalStatus.Pending);
+        Assert.That(unaligned.Select(x => x.User.Id), Is.EqualTo(all.Skip(1).Select(x => x.User.Id)));
+        var beyondEnd = await _service.List(admin.Id, 20, 2, UserRole.Teacher, TeacherApprovalStatus.Pending);
+        Assert.That(beyondEnd, Is.Empty);
     }
 
     [Test]
     public async Task AC2_MapperRoundTripsAllFieldsIncludingApprovedTeacherAndVersionMetadata()
     {
-        var (_, admin) = await _service.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
-        var (context, teacher) = await _service.Execute(new RegisterUserCommand("Teacher@Example.it", "password123", UserRole.Teacher));
-        var (approvedContext, approved) = await _service.Execute(new ApproveTeacherCommand(admin.Id, teacher.Id, context.Version));
+        var (_, admin) = await _service.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
+        var (context, teacher) = await _service.ExecuteAndGet(new RegisterUserCommand("Teacher@Example.it", "password123", UserRole.Teacher));
+        var (approvedContext, approved) = await _service.ExecuteAndGet(new ApproveTeacherCommand(admin.Id, teacher.Id, context.Version));
         var mapper = new UserDocumentMapper();
         var mapped = mapper.ToDocument(approved);
         Assert.That(mapped.Email, Is.EqualTo(approved.Email));
@@ -101,10 +106,10 @@ public sealed class MongoUsersRepositoryTests
     [Test]
     public async Task AC2_ConcurrentRoleChangeAndApprovalCannotBothOverwriteTheSameVersion()
     {
-        var (_, admin) = await _service.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
-        var (context, teacher) = await _service.Execute(new RegisterUserCommand("teacher@example.it", "password123", UserRole.Teacher));
+        var (_, admin) = await _service.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
+        var (context, teacher) = await _service.ExecuteAndGet(new RegisterUserCommand("teacher@example.it", "password123", UserRole.Teacher));
         var racing = new UsersService(new SynchronizedReadRepository(_repository, teacher.Id), new AspNetUsersPasswordHasher(), new NullUsersNotifier());
-        async Task<string> Attempt(Func<Task<(ResourceContext Context, User User)>> action)
+        async Task<string> Attempt(Func<Task> action)
         {
             try { await action(); return "success"; }
             catch (UsersVersionException) { return "stale"; }
@@ -134,8 +139,18 @@ public sealed class MongoUsersRepositoryTests
             return result;
         }
         public Task<ResourceContext> Upsert(User user, int? version = null) => inner.Upsert(user, version);
-        public Task<(ResourceContext Context, User User)?> FindByEmail(string email) => inner.FindByEmail(email);
-        public Task<IReadOnlyList<(ResourceContext Context, User User)>> List(int offset, int limit, UserRole? role, TeacherApprovalStatus? approval) => inner.List(offset, limit, role, approval);
+        public Task<IReadOnlyList<(ResourceContext Context, User User)>> Search(UsersQuery query) => inner.Search(query);
+    }
+
+    [Test]
+    public async Task AC1_ReplayedRegistrationCannotOverwriteExistingIdentity()
+    {
+        var command = new RegisterUserCommand("replay@example.it", "password123", UserRole.Student);
+        await _service.Execute(command);
+        var original = await _service.Get(command.Id);
+        Assert.ThrowsAsync<UsersVersionException>(() => _service.Execute(command));
+        var unchanged = await _service.Get(command.Id);
+        Assert.That(unchanged, Is.EqualTo(original));
     }
 
     [Test]

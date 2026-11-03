@@ -26,8 +26,7 @@ public sealed class UsersHttpTests
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
-            builder.UseSetting("Mongo:ConnectionString", _uri);
-            builder.UseSetting("Mongo:Database", _db);
+            builder.UseSetting("MongoDB:ConnectionString", new MongoUrlBuilder(_uri) { DatabaseName = _db }.ToString());
         });
     }
 
@@ -56,7 +55,8 @@ public sealed class UsersHttpTests
         Assert.That(registration.RootElement.TryGetProperty("passwordHash", out _), Is.False);
         var login = await teacher.PostAsJsonAsync("/api/users/login", new { email = "teacher@example.it", password = "password123" });
         Assert.That(login.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-        Assert.That((await teacher.GetAsync("/api/admin/users")).StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        await Token(teacher);
+        Assert.That((await teacher.PostAsJsonAsync("/api/admin/users/search", new { })).StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
         await Token(admin);
         Assert.That((await admin.PostAsJsonAsync("/api/users/login", new { email = "admin@example.it", password = "password123" })).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         await Token(admin);
@@ -95,7 +95,7 @@ public sealed class UsersHttpTests
         using var client = _factory.CreateClient();
         using (var scope = _factory.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<IUsersService>().Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
-        Assert.That((await client.GetAsync("/api/admin/users")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { })).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         await Token(client);
         var created = await client.PostAsJsonAsync("/api/users/register", new { email = "student@example.it", password = "password123", role = "Student" });
         using var student = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
@@ -130,8 +130,8 @@ public sealed class UsersHttpTests
         using var scope = _factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
         var auth = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
-        var (_, admin) = await users.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
-        var (context, teacher) = await users.Execute(new RegisterUserCommand("teacher@example.it", "password123", UserRole.Teacher));
+        var (_, admin) = await users.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
+        var (context, teacher) = await users.ExecuteAndGet(new RegisterUserCommand("teacher@example.it", "password123", UserRole.Teacher));
         var adminPrincipal = CoursePilot.Host.Modules.Users.Transports.Http.UsersCookieEvents.CreatePrincipal(admin.Id, admin.SessionRevision);
         var teacherPrincipal = CoursePilot.Host.Modules.Users.Transports.Http.UsersCookieEvents.CreatePrincipal(teacher.Id, teacher.SessionRevision);
         Assert.That((await auth.AuthorizeAsync(adminPrincipal, null, "Admin")).Succeeded, Is.True);
@@ -149,8 +149,19 @@ public sealed class UsersHttpTests
         var response = await client.GetAsync("/swagger/v1/swagger.json");
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var antiforgery = document.RootElement.GetProperty("paths").GetProperty("/api/users/antiforgery").GetProperty("get");
+        var antiforgerySchema = antiforgery.GetProperty("responses").GetProperty("200").GetProperty("content").GetProperty("application/json").GetProperty("schema");
+        Assert.That(antiforgerySchema.GetProperty("$ref").GetString(), Does.EndWith("/AntiforgeryTokenModel"));
         var parameters = document.RootElement.GetProperty("paths").GetProperty("/api/users/register").GetProperty("post").GetProperty("parameters");
         Assert.That(parameters.EnumerateArray().Any(p => p.GetProperty("name").GetString() == "X-CSRF-TOKEN"), Is.True);
+        var search = document.RootElement.GetProperty("paths").GetProperty("/api/admin/users/search").GetProperty("post");
+        Assert.That(search.GetProperty("responses").TryGetProperty("200", out _), Is.True);
+        Assert.That(search.GetProperty("responses").TryGetProperty("403", out _), Is.True);
+        Assert.That(search.GetProperty("parameters").EnumerateArray().Any(p => p.GetProperty("name").GetString() == "X-CSRF-TOKEN"), Is.True);
+        Assert.That(search.GetProperty("parameters").EnumerateArray().Any(p => p.GetProperty("name").GetString() == "If-Match"), Is.False);
+        var roleOperation = document.RootElement.GetProperty("paths").GetProperty("/api/admin/users/{id}/role").GetProperty("put");
+        Assert.That(roleOperation.GetProperty("responses").TryGetProperty("412", out _), Is.True);
+        Assert.That(roleOperation.GetProperty("parameters").EnumerateArray().Any(p => p.GetProperty("name").GetString() == "If-Match"), Is.True);
     }
 
     [Test]
@@ -184,7 +195,7 @@ public sealed class UsersHttpTests
         using var scope = _factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
         await users.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
-        var (context, student) = await users.Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
+        var (context, student) = await users.ExecuteAndGet(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
         await users.Execute(new RegisterUserCommand("other@example.it", "password123", UserRole.Student));
         await Token(client);
         Assert.That((await client.PostAsJsonAsync("/api/users/login", new { email = "admin@example.it", password = "password123" })).StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -195,12 +206,24 @@ public sealed class UsersHttpTests
         using var invalidApproval = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/users/{student.Id.Value}/approve-teacher");
         invalidApproval.Headers.TryAddWithoutValidation("If-Match", $"\"{context.Version}\"");
         Assert.That((await client.SendAsync(invalidApproval)).StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
-        Assert.That((await client.GetAsync("/api/admin/users?limit=101")).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
-        Assert.That((await client.GetAsync("/api/admin/users?role=Invalid")).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { limit = 101 })).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { role = "Invalid" })).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        client.DefaultRequestHeaders.Remove("X-CSRF-TOKEN");
+        Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { role = "Student" })).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        await Token(client);
+        var search = await client.PostAsJsonAsync("/api/admin/users/search", new { role = "Student", limit = 1 });
+        Assert.That(search.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        using var searchResults = JsonDocument.Parse(await search.Content.ReadAsStringAsync());
+        Assert.That(searchResults.RootElement.GetArrayLength(), Is.EqualTo(1));
+        Assert.That(searchResults.RootElement[0].GetProperty("role").GetString(), Is.EqualTo("Student"));
+        Assert.That(searchResults.RootElement[0].TryGetProperty("passwordHash", out _), Is.False);
         Assert.That((await client.GetAsync($"/api/admin/users/{Guid.NewGuid()}")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
-        using var malformed = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/users/{student.Id.Value}/role") { Content = JsonContent.Create(new { role = "Teacher" }) };
-        malformed.Headers.TryAddWithoutValidation("If-Match", "1");
-        Assert.That((await client.SendAsync(malformed)).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        foreach (var invalidVersion in new[] { "1", "\"0\"", "\"-1\"", "W/\"1\"", "\"1\", \"2\"", "\" 1\"", "\"x\"" })
+        {
+            using var malformed = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/users/{student.Id.Value}/role") { Content = JsonContent.Create(new { role = "Teacher" }) };
+            malformed.Headers.TryAddWithoutValidation("If-Match", invalidVersion);
+            Assert.That((await client.SendAsync(malformed)).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest), invalidVersion);
+        }
         using var role = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/users/{student.Id.Value}/role") { Content = JsonContent.Create(new { role = "Teacher" }) };
         role.Headers.TryAddWithoutValidation("If-Match", $"\"{context.Version}\"");
         var changed = await client.SendAsync(role);
@@ -216,12 +239,12 @@ public sealed class UsersHttpTests
         using var client = _factory.CreateClient();
         using var scope = _factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
-        var (_, admin) = await users.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
-        var (context, student) = await users.Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
+        var (_, admin) = await users.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
+        var (context, student) = await users.ExecuteAndGet(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
         await Token(client);
         Assert.That((await client.PostAsJsonAsync("/api/users/login", new { email = "student@example.it", password = "password123" })).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         await Token(client);
-        Assert.That((await client.GetAsync("/api/admin/users")).StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { })).StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
         Assert.That((await client.GetAsync($"/api/admin/users/{student.Id.Value}")).StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
         foreach (var (path, body) in new[] { ("email", (object)new { email = "new@example.it", actorId = admin.Id.Value }), ("role", (object)new { role = "Admin", actorId = admin.Id.Value }) })
         {
@@ -244,7 +267,7 @@ public sealed class UsersHttpTests
         using var scope = _factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
         await users.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
-        var (context, student) = await users.Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
+        var (context, student) = await users.ExecuteAndGet(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
         await Token(studentClient);
         Assert.That((await studentClient.PostAsJsonAsync("/api/users/login", new { email = "student@example.it", password = "password123" })).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That((await studentClient.GetAsync("/api/users/me")).StatusCode, Is.EqualTo(HttpStatusCode.OK));

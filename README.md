@@ -49,7 +49,8 @@ credential. NuGet accepts the protected environment variable
 The CI workflow expects `REGISTRY_TOKEN`. Integration tests require MongoDB and use
 `MONGODB_URI` (default `mongodb://127.0.0.1:27017`). They create and remove isolated databases.
 
-Set `Mongo__ConnectionString` and `Mongo__Database` for the application. In production,
+Set `MongoDB__ConnectionString` to a MongoDB URI including the database name (for example,
+`mongodb://localhost:27017/CoursePilot`) for the application. In production,
 set `DataProtection__KeysPath` to persistent shared key storage with restricted access and
 appropriate at-rest protection, so cookies remain valid across instances and restarts.
 Use HTTPS: authentication cookies are Secure in production; development explicitly allows
@@ -71,7 +72,7 @@ Email is required and normalized using trim and invariant uppercase; passwords m
 `Pending`), never `Admin`; approval is a separate admin operation. The API provides
 `GET /api/users/antiforgery`, `POST /api/users/register`, `POST /api/users/login`,
 `POST /api/users/logout`, `GET /api/users/me`, and `GET /api/users/{id}`. Admins have
-`GET /api/admin/users`, `GET /api/admin/users/{id}`, `PUT .../{id}/email`,
+`POST /api/admin/users/search` with JSON filters (`offset`, `limit`, `role`, `approval`), `GET /api/admin/users/{id}`, `PUT .../{id}/email`,
 `PUT .../{id}/role`, and `POST .../{id}/approve-teacher`. Admin writes require `If-Match`
 with the quoted integer version from the ETag (for example `"1"`); stale versions are 412.
 
@@ -86,8 +87,9 @@ session; get token; read teacher detail and ETag; approve using that ETag; verif
 Teacher cookie is rejected; get a fresh token and log the Teacher in again; inspect `/me`.
 
 For image builds, provide the same NuGet credentials through a BuildKit secret named
-`nuget_credentials` (not a Docker build argument). The artifacts workflow supplies it
-from `REGISTRY_TOKEN`. For example, with the credential stored in the environment variable
+`nuget_credentials` (not a Docker build argument). The artifacts workflow currently does
+not supply this secret, so its image build cannot succeed until credentials are configured
+in a later change. For example, with the credential stored in the environment variable
 `NuGetPackageSourceCredentials_codiceplastico`:
 
 ```bash

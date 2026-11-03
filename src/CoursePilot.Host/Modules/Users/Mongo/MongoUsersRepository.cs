@@ -3,47 +3,52 @@ using MongoDB.Driver;
 
 namespace CoursePilot.Host.Modules.Users.Mongo;
 
-public sealed class MongoUsersRepository(IMongoDatabase database, UserDocumentMapper documentMapper)
+public sealed class MongoUsersRepository(IMongoDatabase database, IDocumentMapper<User, UserDocument> documentMapper)
     : DefaultMongoRepository<UserId, User, UserDocument>(database, CollectionName, documentMapper), IUsersRepository
 {
     public const string CollectionName = "users";
 
-    public new async Task<(ResourceContext Context, User User)> Get(UserId id)
+    public async Task<IReadOnlyList<(ResourceContext Context, User User)>> Search(UsersQuery query)
     {
-        var result = await base.Get(id);
-        if (result.Item1 is null) throw new KeyNotFoundException();
-        return result;
+        var builder = Builders<Document<UserDocument>>.Filter;
+        var filter = query switch
+        {
+            UsersByEmailQuery email => builder.Eq(document => document.Value.NormalizedEmail, email.NormalizedEmail),
+            UsersListQuery list => BuildListFilter(list),
+            _ => throw new ArgumentException("Unknown users query.")
+        };
+        var (offset, limit) = query switch
+        {
+            UsersByEmailQuery => (0, 1),
+            UsersListQuery list when list.Offset >= 0 && list.Limit is >= 1 and <= 100 && list.Offset <= int.MaxValue - list.Limit => (list.Offset, list.Limit),
+            _ => throw new ArgumentException("Invalid pagination.")
+        };
+
+        // Icaro pages are 1-based; a non-aligned offset can span at most two pages.
+        var page = offset / limit + 1;
+        var remainder = offset % limit;
+        var (_, first) = await ExecuteQuery(filter, page: page, size: limit);
+        var results = first.Skip(remainder).ToList();
+        if (remainder != 0 && first.Length == limit && results.Count < limit)
+        {
+            var (_, second) = await ExecuteQuery(filter, page: page + 1, size: limit);
+            results.AddRange(second.Take(limit - results.Count));
+        }
+        return results.Select(item => (item.Context, item.Resource)).ToArray();
     }
 
-    public new async Task<ResourceContext> Upsert(User resource, int? version = null)
+    private static FilterDefinition<Document<UserDocument>> BuildListFilter(UsersListQuery query)
     {
-        try { return await base.Upsert(resource, version); }
-        catch (MongoWriteException exception) when (exception.WriteError.Category == ServerErrorCategory.DuplicateKey)
+        var builder = Builders<Document<UserDocument>>.Filter;
+        var filter = builder.Empty;
+        if (query.Role.HasValue)
         {
-            throw new UsersDuplicateEmailException();
+            filter &= builder.Eq(document => document.Value.Role, query.Role.Value.ToString());
         }
-        catch (MongoCommandException exception) when (exception.Code == 11000)
+        if (query.Approval.HasValue)
         {
-            throw new UsersDuplicateEmailException();
+            filter &= builder.Eq(document => document.Value.TeacherApprovalStatus, query.Approval.Value.ToString());
         }
-        catch (InvalidOperationException) when (version.HasValue)
-        {
-            throw new UsersVersionException();
-        }
-    }
-
-    public async Task<(ResourceContext Context, User User)?> FindByEmail(string normalizedEmail)
-    {
-        var document = await collection.Find(x => x.IsActive && x.Value.NormalizedEmail == normalizedEmail).SingleOrDefaultAsync();
-        return document is null ? null : (document.ToResourceContext(), mapper.ToResource(document));
-    }
-
-    public async Task<IReadOnlyList<(ResourceContext Context, User User)>> List(int offset, int limit, UserRole? role, TeacherApprovalStatus? approval)
-    {
-        var filter = Builders<Document<UserDocument>>.Filter.Eq(x => x.IsActive, true);
-        if (role.HasValue) filter &= Builders<Document<UserDocument>>.Filter.Eq(x => x.Value.Role, role.Value.ToString());
-        if (approval.HasValue) filter &= Builders<Document<UserDocument>>.Filter.Eq(x => x.Value.TeacherApprovalStatus, approval.Value.ToString());
-        var documents = await collection.Find(filter).SortBy(x => x.Id).Skip(offset).Limit(limit).ToListAsync();
-        return documents.Select(x => (x.ToResourceContext(), mapper.ToResource(x))).ToArray();
+        return filter;
     }
 }

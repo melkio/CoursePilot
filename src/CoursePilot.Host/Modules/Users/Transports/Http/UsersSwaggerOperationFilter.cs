@@ -17,7 +17,7 @@ public sealed class UsersSwaggerOperationFilter : IOperationFilter
             Description = "Obtain the request token and cookie from GET /api/users/antiforgery. Refresh after login or logout.",
             Schema = new OpenApiSchema { Type = JsonSchemaType.String }
         });
-        if (context.ApiDescription.RelativePath?.StartsWith("api/admin/users/", StringComparison.OrdinalIgnoreCase) == true)
+        if (context.ApiDescription.RelativePath?.StartsWith("api/admin/users/{id}/", StringComparison.OrdinalIgnoreCase) == true)
             operation.Parameters.Add(new OpenApiParameter
             {
                 Name = "If-Match", In = ParameterLocation.Header, Required = true,

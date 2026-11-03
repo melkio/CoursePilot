@@ -46,8 +46,7 @@ public sealed class UsersAuthorizationTests
     private WebApplicationFactory<Program> CreateFactory() => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment("Production");
-        builder.UseSetting("Mongo:ConnectionString", _uri);
-        builder.UseSetting("Mongo:Database", _db);
+        builder.UseSetting("MongoDB:ConnectionString", new MongoUrlBuilder(_uri) { DatabaseName = _db }.ToString());
         builder.UseSetting("DataProtection:KeysPath", _keys);
         builder.ConfigureServices(services => services.AddControllers().AddApplicationPart(typeof(PolicyProbeController).Assembly));
     });
@@ -73,9 +72,9 @@ public sealed class UsersAuthorizationTests
         using var teacher = Client(_factory);
         using var scope = _factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
-        var (_, administrator) = await users.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
+        var (_, administrator) = await users.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
         await users.Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
-        var (version, pending) = await users.Execute(new RegisterUserCommand("teacher@example.it", "password123", UserRole.Teacher));
+        var (version, pending) = await users.ExecuteAndGet(new RegisterUserCommand("teacher@example.it", "password123", UserRole.Teacher));
         Assert.That((await anonymous.GetAsync("/test-policy/student")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         await Login(admin, "admin@example.it");
         await Login(student, "student@example.it");
