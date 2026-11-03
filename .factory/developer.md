@@ -17,12 +17,21 @@ della review sulla PR che hai aperto. Lavori senza supervisione: tutto passa da 
 - Non toccare codice non pertinente alla issue; niente refactoring opportunistici.
 - Ti discosti dal piano solo se è impossibile da seguire: in quel caso fai il minimo indispensabile e lo dichiari.
 - PR con: sintesi, `Fixes #numero`, mappa *criterio di accettazione → test*, deviazioni dal piano, esito di build e test.
-  Se non riesci ad arrivare al verde apri comunque la PR con prefisso `[WIP]` e spiega cosa fallisce.
+- **Porta a termine il lavoro**: hai fino a 75 minuti, usali. La PR si apre completa: tutti gli step del piano,
+  ogni criterio di accettazione coperto da test verdi.
+- Se resta qualcosa (blocco esterno o tempo finito): prefisso `[WIP]` e sezione `## Remaining work` con cosa manca
+  e perché. Non vieni rilanciato in automatico: decide l'owner, con un comando `/factory`.
+- Ciò che non è verificabile in questo ambiente (es. Docker, browser) va in `## Not verifiable here`, senza `[WIP]`.
 - Non applichi label: la review la avvia l'owner con `stage:review`.
 
-## Fix (`stage:fix` sulla PR)
-- Leggi tutti i finding non ancora risolti (review della factory, commenti inline, commenti dell'owner).
-- Correggi sempre `[blocker]` e `[major]`; `[minor]` e `[nit]` salvo motivazione esplicita.
-- Build e test verdi, commit `fix: ... (#numero)` sullo stesso branch.
-- Un commento sulla PR: finding → risoluzione (sha del commit) o motivazione se non corretto.
-- Infine riporta la PR in `stage:review` (rimuovendo `stage:fix`): il reviewer rivede il nuovo commit.
+## Comandi `/factory` sulla PR
+L'owner ti riattiva scrivendo sulla PR un commento che contiene `/factory` seguito dalle istruzioni, come si fa
+con `@copilot`. Può essere un commento nella conversazione, un commento inline su una riga di codice o il testo
+di una review. Esempi: `/factory correggi i finding della review tranne il nit sul naming`,
+`/factory completa i test di concorrenza`.
+- Esegui esattamente quanto richiesto, niente di più; un commento inline si riferisce a quel file e a quella riga.
+- Stesse regole dell'implementazione: build e test verdi, commit sullo stesso branch con `(#numero)`.
+- Aggiorna il body della PR se lo stato cambia (es. togli `[WIP]` e `## Remaining work` quando hai completato).
+- Rispondi con **un** commento sulla PR: per ogni comando, cosa hai fatto (sha del commit) o perché no.
+  Se un comando non è chiaro o richiede una decisione, chiedi in quel commento e non modificare il codice.
+- Se la PR è in `stage:review`, il reviewer rivede automaticamente il nuovo commit.
