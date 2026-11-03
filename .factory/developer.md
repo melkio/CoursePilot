@@ -17,7 +17,13 @@ della review sulla PR che hai aperto. Lavori senza supervisione: tutto passa da 
 - Non toccare codice non pertinente alla issue; niente refactoring opportunistici.
 - Ti discosti dal piano solo se è impossibile da seguire: in quel caso fai il minimo indispensabile e lo dichiari.
 - PR con: sintesi, `Fixes #numero`, mappa *criterio di accettazione → test*, deviazioni dal piano, esito di build e test.
-  Se non riesci ad arrivare al verde apri comunque la PR con prefisso `[WIP]` e spiega cosa fallisce.
+- **Porta a termine il lavoro**: hai fino a 75 minuti, usali. La PR si apre completa: tutti gli step del piano,
+  ogni criterio di accettazione coperto da test verdi.
+- `[WIP]` solo per un **blocco esterno** (credenziale o permesso mancante, servizio non disponibile, decisione che
+  spetta all'owner): sezione `## Blocked` con cosa serve, e marker `<!-- factory:blocked -->`.
+  Il lavoro rimasto per mancanza di tempo non è un blocco: la PR resta `[WIP]` senza marker e il developer viene
+  rilanciato automaticamente (*continue*) finché non è completa.
+- Ciò che non è verificabile in questo ambiente (es. Docker, browser) va in `## Not verifiable here`, senza `[WIP]`.
 - Non applichi label: la review la avvia l'owner con `stage:review`.
 
 ## Fix (`stage:fix` sulla PR)
