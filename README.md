@@ -75,6 +75,7 @@ Email is required and normalized using trim and invariant uppercase; passwords m
 `POST /api/admin/users/search` with JSON filters (`offset`, `limit`, `role`, `approval`), `GET /api/admin/users/{id}`, `PUT .../{id}/email`,
 `PUT .../{id}/role`, and `POST .../{id}/approve-teacher`. Admin writes require `If-Match`
 with the quoted integer version from the ETag (for example `"1"`); stale versions are 412.
+User resource responses include `context.version`, `context.createdAt`, and `context.updatedAt`.
 
 All mutating requests, including register/login/logout, require the antiforgery cookie and
 `X-CSRF-TOKEN` header obtained from the token endpoint. Obtain a fresh token after login,

@@ -1,4 +1,4 @@
-using CoursePilot.Host.Modules.Users.Mongo;
+using MongoDB.Driver;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -14,6 +14,8 @@ public sealed class UsersExceptionFilter : IExceptionFilter
             UnauthorizedAccessException => 403,
             KeyNotFoundException => 404,
             UsersDuplicateEmailException => 409,
+            MongoWriteException ex when ex.WriteError.Category == ServerErrorCategory.DuplicateKey => 409,
+            MongoCommandException ex when ex.Code == 11000 => 409,
             UsersVersionException => 412,
             UsersConflictException => 409,
             _ => 500

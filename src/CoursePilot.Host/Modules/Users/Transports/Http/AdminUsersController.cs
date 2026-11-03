@@ -27,8 +27,8 @@ public sealed class AdminUsersController(IUsersService users) : ControllerBase
             "Approved" => TeacherApprovalStatus.Approved,
             _ => throw new ArgumentException("Invalid approval.")
         };
-        var result = await users.List(ActorId(), model.Offset, model.Limit, role, approval);
-        return Ok(result.Select(item => GetUserModel.From(item.Context, item.User)));
+        var result = await users.Search(new SearchUsersQuery(ActorId(), model.Offset, model.Limit, role, approval));
+        return Ok(result.Users.Select(item => GetUserModel.From(item.Context, item.Resource)));
     }
 
     [HttpGet("{id:guid}")]

@@ -9,27 +9,26 @@ using MongoDB.Driver;
 
 namespace CoursePilot.Host.Modules.Users;
 
-public static class UsersModuleRegistration
+public sealed class UsersModuleRegistration : IModuleConfiguration
 {
-    public static IServiceCollection AddUsersModule(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment environment)
+    public bool IsEnabled => true;
+    public int Order => 10;
+
+    public IServiceCollection RegisterComponents(IServiceCollection services)
     {
-        services.AddMongo(options =>
-        {
-            configuration.GetSection(MongoOptions.DefaultSection).Bind(options);
-        });
-        services.AddSingleton<IMongoClient>(sp => sp.GetRequiredService<IMongoDatabase>().Client);
         services.AddSingleton<Icaro.IDocumentMapper<User, UserDocument>, UserDocumentMapper>();
-        services.AddSingleton<MongoUsersRepository>();
-        services.AddSingleton<IUsersRepository, UsersRepositoryErrorTranslation>();
+        services.AddSingleton<IUsersRepository, MongoUsersRepository>();
         services.AddSingleton<IUsersPasswordHasher, AspNetUsersPasswordHasher>();
         services.AddSingleton<IUsersNotifier, NullUsersNotifier>();
         services.AddScoped<IUsersService, UsersService>();
         services.AddSingleton<UsersMongoInitializer>();
-        services.Configure<BootstrapAdminOptions>(configuration.GetSection("BootstrapAdmin"));
+        services.AddOptions<BootstrapAdminOptions>().BindConfiguration("BootstrapAdmin");
         services.AddScoped<BootstrapAdminCommandHandler>();
         services.AddScoped<UsersCookieEvents>();
         services.AddScoped<IAuthorizationHandler, UsersAuthorizationHandler>();
-        services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
+        services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();
+        services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
+            .Configure<IConfiguration, IWebHostEnvironment>((options, configuration, environment) =>
         {
             options.Cookie.HttpOnly = true;
             options.Cookie.SameSite = SameSiteMode.Lax;

@@ -26,28 +26,28 @@ public sealed class PolicyProbeController : ControllerBase
 
 public sealed class UsersAuthorizationTests
 {
-    private MongoClient _mongo = null!; // Assigned by NUnit setup.
-    private WebApplicationFactory<Program> _factory = null!; // Assigned by NUnit setup.
-    private string _db = string.Empty;
-    private string _uri = string.Empty;
-    private string _keys = string.Empty;
+    private MongoClient mongo = null!; // Assigned by NUnit setup.
+    private WebApplicationFactory<Program> factory = null!; // Assigned by NUnit setup.
+    private string db = string.Empty;
+    private string uri = string.Empty;
+    private string keys = string.Empty;
 
     [SetUp]
     public void Setup()
     {
-        _uri = Environment.GetEnvironmentVariable("MONGODB_URI") ?? "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=5000";
-        _db = "coursepilot_policy_" + Guid.NewGuid().ToString("N");
-        _keys = Path.Combine(Path.GetTempPath(), "coursepilot-keys-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_keys);
-        _mongo = new MongoClient(_uri);
-        _factory = CreateFactory();
+        uri = Environment.GetEnvironmentVariable("MONGODB_URI") ?? "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=5000";
+        db = "coursepilot_policy_" + Guid.NewGuid().ToString("N");
+        keys = Path.Combine(Path.GetTempPath(), "coursepilot-keys-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(keys);
+        mongo = new MongoClient(uri);
+        factory = CreateFactory();
     }
 
     private WebApplicationFactory<Program> CreateFactory() => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment("Production");
-        builder.UseSetting("MongoDB:ConnectionString", new MongoUrlBuilder(_uri) { DatabaseName = _db }.ToString());
-        builder.UseSetting("DataProtection:KeysPath", _keys);
+        builder.UseSetting("MongoDB:ConnectionString", new MongoUrlBuilder(uri) { DatabaseName = db }.ToString());
+        builder.UseSetting("DataProtection:KeysPath", keys);
         builder.ConfigureServices(services => services.AddControllers().AddApplicationPart(typeof(PolicyProbeController).Assembly));
     });
 
@@ -56,21 +56,21 @@ public sealed class UsersAuthorizationTests
     {
         try
         {
-            await _factory.DisposeAsync();
-            await _mongo.DropDatabaseAsync(_db);
-            Directory.Delete(_keys, true);
+            await factory.DisposeAsync();
+            await mongo.DropDatabaseAsync(db);
+            Directory.Delete(keys, true);
         }
-        finally { _mongo.Dispose(); }
+        finally { mongo.Dispose(); }
     }
 
     [Test]
     public async Task AC2_PoliciesEnforceExclusiveRolesOnActualHttpEndpoints()
     {
-        using var anonymous = Client(_factory);
-        using var admin = Client(_factory);
-        using var student = Client(_factory);
-        using var teacher = Client(_factory);
-        using var scope = _factory.Services.CreateScope();
+        using var anonymous = Client(factory);
+        using var admin = Client(factory);
+        using var student = Client(factory);
+        using var teacher = Client(factory);
+        using var scope = factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
         var (_, administrator) = await users.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
         await users.Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
@@ -91,21 +91,21 @@ public sealed class UsersAuthorizationTests
     [Test]
     public async Task AC2_UnavailablePersistenceRejectsExistingCookie()
     {
-        using var client = Client(_factory);
-        using (var scope = _factory.Services.CreateScope())
+        using var client = Client(factory);
+        using (var scope = factory.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<IUsersService>().Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
         await Login(client, "student@example.it");
         Assert.That((await client.GetAsync("/api/users/me")).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         // Dispose only the host's client; the independently owned cleanup client remains usable.
-        ((MongoClient)_factory.Services.GetRequiredService<IMongoClient>()).Dispose();
+        ((MongoClient)factory.Services.GetRequiredService<IMongoClient>()).Dispose();
         Assert.That((await client.GetAsync("/api/users/me")).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
     }
 
     [Test]
     public async Task AC2_ProductionCookieIsSecureAndSurvivesReplicaAndRestart()
     {
-        using var client = Client(_factory);
-        using (var scope = _factory.Services.CreateScope())
+        using var client = Client(factory);
+        using (var scope = factory.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<IUsersService>().Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
         var cookie = await Login(client, "student@example.it");
         Assert.That(cookie, Does.Contain("secure").IgnoreCase);

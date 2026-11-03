@@ -12,37 +12,37 @@ namespace CoursePilot.Tests.Modules.Users.Transports.Http;
 
 public sealed class UsersHttpTests
 {
-    private WebApplicationFactory<Program> _factory = null!; // Initialized by NUnit before each test.
-    private MongoClient _mongo = null!; // Initialized by NUnit before each test.
-    private string _db = string.Empty;
-    private string _uri = string.Empty;
+    private WebApplicationFactory<Program> factory = null!; // Initialized by NUnit before each test.
+    private MongoClient mongo = null!; // Initialized by NUnit before each test.
+    private string db = string.Empty;
+    private string uri = string.Empty;
 
     [SetUp]
     public void Setup()
     {
-        _uri = Environment.GetEnvironmentVariable("MONGODB_URI") ?? "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=5000";
-        _db = "coursepilot_http_" + Guid.NewGuid().ToString("N");
-        _mongo = new MongoClient(_uri);
-        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        uri = Environment.GetEnvironmentVariable("MONGODB_URI") ?? "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=5000";
+        db = "coursepilot_http_" + Guid.NewGuid().ToString("N");
+        mongo = new MongoClient(uri);
+        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
-            builder.UseSetting("MongoDB:ConnectionString", new MongoUrlBuilder(_uri) { DatabaseName = _db }.ToString());
+            builder.UseSetting("MongoDB:ConnectionString", new MongoUrlBuilder(uri) { DatabaseName = db }.ToString());
         });
     }
 
     [TearDown]
     public async Task Cleanup()
     {
-        try { await _factory.DisposeAsync(); await _mongo.DropDatabaseAsync(_db); }
-        finally { _mongo.Dispose(); }
+        try { await factory.DisposeAsync(); await mongo.DropDatabaseAsync(db); }
+        finally { mongo.Dispose(); }
     }
 
     [Test]
     public async Task AC2_TeacherApprovalInvalidatesCookieAndAdminOperationsRequireCsrf()
     {
-        using var teacher = _factory.CreateClient();
-        using var admin = _factory.CreateClient();
-        using (var scope = _factory.Services.CreateScope())
+        using var teacher = factory.CreateClient();
+        using var admin = factory.CreateClient();
+        using (var scope = factory.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<IUsersService>().Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
         var noCsrf = await teacher.PostAsJsonAsync("/api/users/register", new { email = "teacher@example.it", password = "password123", role = "Teacher" });
         Assert.That(noCsrf.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
@@ -63,6 +63,11 @@ public sealed class UsersHttpTests
         var target = await admin.GetAsync($"/api/admin/users/{teacherId}");
         var etag = target.Headers.ETag?.ToString();
         Assert.That(etag, Is.Not.Null);
+        using var targetJson = JsonDocument.Parse(await target.Content.ReadAsStringAsync());
+        var resourceContext = targetJson.RootElement.GetProperty("context");
+        Assert.That(resourceContext.GetProperty("version").GetInt32(), Is.EqualTo(1));
+        Assert.That(resourceContext.GetProperty("createdAt").GetDateTimeOffset(), Is.Not.EqualTo(default(DateTimeOffset)));
+        Assert.That(resourceContext.GetProperty("updatedAt").GetDateTimeOffset(), Is.Not.EqualTo(default(DateTimeOffset)));
         using var approve = new HttpRequestMessage(HttpMethod.Post, $"/api/admin/users/{teacherId}/approve-teacher");
         approve.Headers.TryAddWithoutValidation("If-Match", etag);
         var approval = await admin.SendAsync(approve);
@@ -77,7 +82,7 @@ public sealed class UsersHttpTests
     [Test]
     public async Task AC1_InvalidInputsAndUnknownPrivilegedFieldsAreRejected()
     {
-        using var client = _factory.CreateClient();
+        using var client = factory.CreateClient();
         await Token(client);
         var invalid = await client.PostAsJsonAsync("/api/users/register", new { email = "", password = "password123", role = "Student" });
         Assert.That(invalid.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
@@ -92,8 +97,8 @@ public sealed class UsersHttpTests
     [Test]
     public async Task AC1_ChangeEmailKeepsIdAndStaleOrMissingIfMatchFails()
     {
-        using var client = _factory.CreateClient();
-        using (var scope = _factory.Services.CreateScope())
+        using var client = factory.CreateClient();
+        using (var scope = factory.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<IUsersService>().Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
         Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { })).StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
         await Token(client);
@@ -112,7 +117,7 @@ public sealed class UsersHttpTests
         Assert.That(updated.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         using var changed = JsonDocument.Parse(await updated.Content.ReadAsStringAsync());
         Assert.That(changed.RootElement.GetProperty("id").GetGuid(), Is.EqualTo(id));
-        using var renamed = _factory.CreateClient();
+        using var renamed = factory.CreateClient();
         await Token(renamed);
         var renamedLogin = await renamed.PostAsJsonAsync("/api/users/login", new { email = "new@example.it", password = "password123" });
         Assert.That(renamedLogin.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -126,8 +131,8 @@ public sealed class UsersHttpTests
     [Test]
     public async Task AC2_PoliciesRejectPendingTeacherAndDoNotInheritAdminPrivileges()
     {
-        using var client = _factory.CreateClient();
-        using var scope = _factory.Services.CreateScope();
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
         var auth = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
         var (_, admin) = await users.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
@@ -145,7 +150,7 @@ public sealed class UsersHttpTests
     [Test]
     public async Task SwaggerDocumentIsServed()
     {
-        using var client = _factory.CreateClient();
+        using var client = factory.CreateClient();
         var response = await client.GetAsync("/swagger/v1/swagger.json");
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), await response.Content.ReadAsStringAsync());
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -167,7 +172,7 @@ public sealed class UsersHttpTests
     [Test]
     public async Task AC1_LoginErrorsAreIndistinguishableAndLogoutRequiresValidCsrf()
     {
-        using var client = _factory.CreateClient();
+        using var client = factory.CreateClient();
         await Token(client);
         Assert.That((await client.PostAsJsonAsync("/api/users/register", new { email = "student@example.it", password = "password123", role = "Student" })).StatusCode, Is.EqualTo(HttpStatusCode.Created));
         var missing = await client.PostAsJsonAsync("/api/users/login", new { email = "missing@example.it", password = "badpassword" });
@@ -191,8 +196,8 @@ public sealed class UsersHttpTests
     [Test]
     public async Task AC2_AdminTransitionsAndDuplicateEmailReturnExpectedStatuses()
     {
-        using var client = _factory.CreateClient();
-        using var scope = _factory.Services.CreateScope();
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
         await users.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
         var (context, student) = await users.ExecuteAndGet(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
@@ -207,6 +212,9 @@ public sealed class UsersHttpTests
         invalidApproval.Headers.TryAddWithoutValidation("If-Match", $"\"{context.Version}\"");
         Assert.That((await client.SendAsync(invalidApproval)).StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
         Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { limit = 101 })).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { limit = 0 })).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { offset = -1 })).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { offset = int.MaxValue, limit = 1 })).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { role = "Invalid" })).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
         client.DefaultRequestHeaders.Remove("X-CSRF-TOKEN");
         Assert.That((await client.PostAsJsonAsync("/api/admin/users/search", new { role = "Student" })).StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
@@ -236,8 +244,8 @@ public sealed class UsersHttpTests
     [Test]
     public async Task AC2_NonAdminCannotUseAnyAdminOperationOrSpoofActor()
     {
-        using var client = _factory.CreateClient();
-        using var scope = _factory.Services.CreateScope();
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
         var (_, admin) = await users.ExecuteAndGet(new BootstrapAdminCommand("admin@example.it", "password123"));
         var (context, student) = await users.ExecuteAndGet(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
@@ -262,9 +270,9 @@ public sealed class UsersHttpTests
     [Test]
     public async Task AC2_ChangingRoleInvalidatesExistingStudentSession()
     {
-        using var studentClient = _factory.CreateClient();
-        using var adminClient = _factory.CreateClient();
-        using var scope = _factory.Services.CreateScope();
+        using var studentClient = factory.CreateClient();
+        using var adminClient = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUsersService>();
         await users.Execute(new BootstrapAdminCommand("admin@example.it", "password123"));
         var (context, student) = await users.ExecuteAndGet(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
@@ -284,7 +292,7 @@ public sealed class UsersHttpTests
     [Test]
     public async Task AC1_IdentityRateLimitIsEnforced()
     {
-        using var limitedFactory = _factory.WithWebHostBuilder(builder => builder.UseSetting("RateLimits:IdentityPermitLimit", "2"));
+        using var limitedFactory = factory.WithWebHostBuilder(builder => builder.UseSetting("RateLimits:IdentityPermitLimit", "2"));
         using var client = limitedFactory.CreateClient();
         await Token(client);
         for (var i = 0; i < 2; i++)

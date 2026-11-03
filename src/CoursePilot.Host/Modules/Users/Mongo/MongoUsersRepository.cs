@@ -8,7 +8,7 @@ public sealed class MongoUsersRepository(IMongoDatabase database, IDocumentMappe
 {
     public const string CollectionName = "users";
 
-    public async Task<IReadOnlyList<(ResourceContext Context, User User)>> Search(UsersQuery query)
+    public async Task<(ResourcesContext Context, ResourceEnvelope<User>[] Users)> Search(UsersQuery query)
     {
         var builder = Builders<Document<UserDocument>>.Filter;
         var filter = query switch
@@ -23,18 +23,16 @@ public sealed class MongoUsersRepository(IMongoDatabase database, IDocumentMappe
             UsersListQuery list when list.Offset >= 0 && list.Limit is >= 1 and <= 100 && list.Offset <= int.MaxValue - list.Limit => (list.Offset, list.Limit),
             _ => throw new ArgumentException("Invalid pagination.")
         };
-
-        // Icaro pages are 1-based; a non-aligned offset can span at most two pages.
         var page = offset / limit + 1;
         var remainder = offset % limit;
-        var (_, first) = await ExecuteQuery(filter, page: page, size: limit);
+        var (context, first) = await ExecuteQuery(filter, page: page, size: limit);
         var results = first.Skip(remainder).ToList();
         if (remainder != 0 && first.Length == limit && results.Count < limit)
         {
             var (_, second) = await ExecuteQuery(filter, page: page + 1, size: limit);
             results.AddRange(second.Take(limit - results.Count));
         }
-        return results.Select(item => (item.Context, item.Resource)).ToArray();
+        return (context, results.ToArray());
     }
 
     private static FilterDefinition<Document<UserDocument>> BuildListFilter(UsersListQuery query)

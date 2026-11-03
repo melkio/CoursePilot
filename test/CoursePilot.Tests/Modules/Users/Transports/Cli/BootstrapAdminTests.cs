@@ -18,7 +18,7 @@ public sealed class BootstrapAdminTests
         try
         {
             await new UsersMongoInitializer(database).Initialize();
-            var users = new UsersService(new UsersRepositoryErrorTranslation(new MongoUsersRepository(database, new UserDocumentMapper())), new AspNetUsersPasswordHasher(), new NullUsersNotifier());
+            var users = new UsersService(new MongoUsersRepository(database, new UserDocumentMapper()), new AspNetUsersPasswordHasher(), new NullUsersNotifier());
             await users.Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
             Assert.That(await RunCli(uri, databaseName, "admin@example.it", "password123"), Is.EqualTo(0));
             Assert.That(await RunCli(uri, databaseName, "ADMIN@example.it", "differentpassword"), Is.EqualTo(0));
