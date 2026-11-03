@@ -47,5 +47,3 @@ public sealed class MongoUsersRepository(IMongoDatabase database, UserDocumentMa
         return documents.Select(x => (x.ToResourceContext(), mapper.ToResource(x))).ToArray();
     }
 }
-
-public sealed class UsersDuplicateEmailException : Exception;

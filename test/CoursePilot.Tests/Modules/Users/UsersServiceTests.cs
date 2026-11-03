@@ -74,7 +74,7 @@ public sealed class UsersServiceTests
         Assert.That(await _service.Execute(new AuthenticateUserCommand("admin@example.it", "password123")), Is.Not.Null);
         Assert.That(await _service.Execute(new AuthenticateUserCommand("admin@example.it", "differentpassword")), Is.Null);
         await _service.Execute(new RegisterUserCommand("student@example.it", "password123", UserRole.Student));
-        Assert.ThrowsAsync<InvalidOperationException>(() => _service.Execute(new BootstrapAdminCommand("STUDENT@example.it", "password123")));
+        Assert.ThrowsAsync<UsersConflictException>(() => _service.Execute(new BootstrapAdminCommand("STUDENT@example.it", "password123")));
     }
 
     private sealed class MemoryRepository : IUsersRepository

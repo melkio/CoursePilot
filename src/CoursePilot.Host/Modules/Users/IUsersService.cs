@@ -55,8 +55,8 @@ public sealed class UsersService(IUsersRepository repository, IUsersPasswordHash
     {
         await RequireAdmin(command.ActorId);
         var (context, user) = await GetExpected(command.TargetId, command.Version);
+        var normalized = NormalizeEmail(command.Email);
         string email = command.Email.Trim();
-        var normalized = NormalizeEmail(email);
         if (user.Email == email) return (context, user);
         return await Save(user with { Email = email, NormalizedEmail = normalized }, context.Version);
     }
@@ -74,7 +74,7 @@ public sealed class UsersService(IUsersRepository repository, IUsersPasswordHash
     {
         await RequireAdmin(command.ActorId);
         var (context, user) = await GetExpected(command.TargetId, command.Version);
-        if (user.Role != UserRole.Teacher) throw new InvalidOperationException("Target is not a teacher.");
+        if (user.Role != UserRole.Teacher) throw new UsersConflictException("Target is not a teacher.");
         if (user.TeacherApprovalStatus == TeacherApprovalStatus.Approved) return (context, user);
         return await Save(user with { TeacherApprovalStatus = TeacherApprovalStatus.Approved, SessionRevision = checked(user.SessionRevision + 1) }, context.Version);
     }
@@ -85,7 +85,7 @@ public sealed class UsersService(IUsersRepository repository, IUsersPasswordHash
         var existing = await repository.FindByEmail(normalized);
         if (existing is not null)
         {
-            if (existing.Value.User.Role != UserRole.Admin) throw new InvalidOperationException("Email belongs to a non-admin account.");
+            if (existing.Value.User.Role != UserRole.Admin) throw new UsersConflictException("Email belongs to a non-admin account.");
             return existing.Value;
         }
         return await Create(command.Email, command.Password, UserRole.Admin);
@@ -129,3 +129,5 @@ public sealed class UsersService(IUsersRepository repository, IUsersPasswordHash
 }
 
 public sealed class UsersVersionException : Exception;
+public sealed class UsersDuplicateEmailException : Exception;
+public sealed class UsersConflictException(string message) : InvalidOperationException(message);
