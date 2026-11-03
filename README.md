@@ -39,7 +39,7 @@ dotnet build CoursePilot.slnx
 dotnet test  CoursePilot.slnx
 ```
 
-## Users slice (work in progress)
+## Users slice
 
 Users uses Icaro 1.0.0 and MongoDB. Configure the `codiceplastico` NuGet source at
 `https://nuget.pkg.github.com/CodicePlastico/index.json` with an approved read-only
@@ -87,5 +87,9 @@ Teacher cookie is rejected; get a fresh token and log the Teacher in again; insp
 
 For image builds, provide the same NuGet credentials through a BuildKit secret named
 `nuget_credentials` (not a Docker build argument). The artifacts workflow supplies it
-from `REGISTRY_TOKEN`. Docker image build verification remains pending where no Docker
-daemon is available.
+from `REGISTRY_TOKEN`. For example, with the credential stored in the environment variable
+`NuGetPackageSourceCredentials_codiceplastico`:
+
+```bash
+docker build --secret id=nuget_credentials,env=NuGetPackageSourceCredentials_codiceplastico -t coursepilot:local .
+```
