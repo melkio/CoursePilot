@@ -3,7 +3,7 @@ name: Build and test projects
 on:
   push:
     branches:
-      - '*'
+      - '**'
       - '!release'
 
 jobs:
