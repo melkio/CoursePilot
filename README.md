@@ -5,7 +5,7 @@ A GitHub template repository for bootstrapping new .NET solutions with a ready-t
 ## What's inside
 
 - `src/CoursePilot.Host/` — the application host project.
-- `test/CoursePilot.Tests/` — the xUnit test project.
+- `test/CoursePilot.Tests/` — the NUnit test project.
 - `CoursePilot.slnx` — the solution file.
 - `Dockerfile` — multi-stage build for the host project.
 - `.github/workflows/` — CI workflows (build, artifacts, clean-up).
@@ -31,6 +31,12 @@ Then open a Pull Request from the pushed branch.
 
 - .NET SDK matching the version declared in [.tool-versions](.tool-versions).
 - `bash`, `sed`, `find` (already available on macOS, Linux and WSL).
+
+The planned Users module requires the `Icaro.Domain` and `Icaro.MongoDB` packages from the
+CodicePlastico GitHub Packages feed (`https://nuget.pkg.github.com/CodicePlastico/index.json`).
+Restoring them requires an approved read-only credential with access to those packages. Keep
+credentials in protected configuration or environment variables, not in the repository or logs.
+The current project does not yet include these packages or the Users module.
 
 ## Build and test
 
