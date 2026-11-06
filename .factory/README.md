@@ -140,6 +140,35 @@ Dopo aver verificato il body e impostato la sola fase `stage:planning`, il workf
 passo successivo tramite `factory-runtime` (`next`); il dispatch REST usa `GITHUB_TOKEN`, non dipende da un webhook.
 Errori e output incompleti lasciano il checkpoint `failed`/`blocked` e sono riprendibili dal dispatcher manuale.
 
+### Planning
+
+`stage:planning` avvia `.github/workflows/factory-planning.yml` dal default branch trusted; il workflow è riprendibile
+anche manualmente dal dispatcher. Il Product manager riceve la specifica funzionale e un contesto limitato dei file
+tracciati sotto `src/CoursePilot.Host/Modules` e `src/CoursePilot.Host/Shared`. L'inferenza restituisce una proposta
+JSON; il publisher ne valida lo schema, la copertura di tutti gli AC e l'assenza di cicli prima di creare o promuovere
+issue.
+
+Una feature riceve `type:feature` e `stage:design` senza dipendenze, altrimenti `stage:blocked`; conserva gli altri
+label non di tipo/fase e riporta una sezione `Dependencies` con una riga `Depends on #X` per issue. Un'epica riceve
+solo `type:epic` e non entra nel design. Le sue issue figlie contengono user story, specifica, AC Given/When/Then,
+out of scope, righe `Depends on #X` e `Part of #N`; le relazioni parent/child sono create anche tramite l'API
+nativa sub-issues. Il body dell'epica contiene `Linked issues` nell'ordine topologico suggerito.
+
+La pubblicazione è separata dall'inferenza. Prima vengono create/recuperate tutte le figlie senza label operative;
+poi il publisher completa i body, le dipendenze, le relazioni native e il body dell'epica. Solo a contratti completi
+applica `type:*`/`stage:*` e invia un dispatch esplicito al dispatcher per le figlie eleggibili senza dipendenze.
+Le altre restano `stage:blocked` fino alla chiusura delle dipendenze. Il commento
+`<!-- factory:product-manager -->` contiene decisione e motivazione; per un'epica include la tabella slice → AC
+coperti → dipendenze.
+
+Un commento checkpoint `<!-- factory:planning-checkpoint:v1 -->`, attribuito al bot verificato, conserva la proposta
+e la mappa chiave stabile della slice → numero issue. Ogni figlia appena creata include la propria chiave nel body,
+così il replay recupera anche una creazione avvenuta prima di un errore API/checkpoint, senza dedurre l'identità dal
+titolo. Un marker con digest nel body rende riconoscibile la scrittura parziale dell'epica; modifiche successive
+all'input o alle slice bloccano la promozione. Errori di validazione, API o autorizzazione lasciano il checkpoint
+fallito e le slice prive di label operative finché i relativi contratti non sono completi; riprendere dal dispatcher
+manuale dopo aver corretto il problema.
+
 ### Permessi e secret
 
 | Job | Permessi GitHub | Secret |
@@ -147,6 +176,8 @@ Errori e output incompleti lasciano il checkpoint `failed`/`blocked` e sono ripr
 | Dispatcher | `contents: read`, `issues: write`, `pull-requests: write`, `actions: write` | solo `GITHUB_TOKEN` con permessi del job |
 | Inferenza Copilot | nessun permesso di scrittura; accesso ai soli dati necessari | `COPILOT_GITHUB_TOKEN`, mai `GITHUB_TOKEN` usato come token Copilot |
 | Publisher | permesso minimo necessario (`issues: write`/`pull-requests: write`; `actions: write` solo per dispatch) | `GITHUB_TOKEN`; mai il secret Copilot |
+| Planning infer | `contents: read`, `issues: read` | `COPILOT_GITHUB_TOKEN` e `GITHUB_TOKEN` di sola lettura |
+| Planning publisher | `contents: read`, `issues: write`, `actions: write` | solo `GITHUB_TOKEN` |
 
 La CLI è installata con versione npm fissata `@github/copilot@1.0.106` e chiamata in modalità non interattiva
 `copilot -p ... --model ... -s --no-ask-user`. Gli ID previsti sono `gpt-6.1-sol`, `gpt-6.1-terra` e
