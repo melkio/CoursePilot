@@ -53,7 +53,7 @@ function existingPlanningOutput(body) {
   if (sha256(normalized) !== marker[2]) {
     throw new Error("Planning output was modified; refusing stale recovery.");
   }
-  return { sourceRevision: marker[1] };
+  return { sourceRevision: marker[1], outputRevision: marker[2] };
 }
 
 function acceptanceCriteria(body) {
@@ -78,6 +78,21 @@ function acceptanceCriteria(body) {
   return ids;
 }
 
+function sectionLines(body, title) {
+  const lines = body.split("\n");
+  const start = lines.findIndex((line) => line.trim().toLowerCase() === `## ${title.toLowerCase()}`);
+  if (start < 0) return [];
+  const end = lines.findIndex((line, index) => index > start && /^##\s/.test(line));
+  return lines.slice(start + 1, end < 0 ? lines.length : end);
+}
+
+function existingDependencies(body) {
+  return sectionLines(body, "Dependencies")
+    .map((line) => /^Depends on #(\d+)$/.exec(line.trim())?.[1])
+    .filter(Boolean)
+    .map(Number);
+}
+
 function parseCheckpoint(comments) {
   const matches = comments.filter((comment) =>
     isTrustedFactoryActor(comment.user) && comment.body?.startsWith(`${CHECKPOINT_MARKER}\n`));
@@ -93,6 +108,14 @@ function parseCheckpoint(comments) {
     !/^[a-f0-9]{64}$/.test(value.source_revision ?? "") ||
     !value.proposal || typeof value.slice_ids !== "object" || Array.isArray(value.slice_ids)) {
     throw new Error("Planning checkpoint does not match the supported schema.");
+  }
+  if (Object.entries(value.slice_ids).some(([key, number]) =>
+    !/^[a-z0-9][a-z0-9-]{0,63}$/.test(key) || !Number.isSafeInteger(number) || number < 1)) {
+    throw new Error("Planning checkpoint contains an invalid slice mapping.");
+  }
+  if (value.output_revision !== null &&
+    !/^[a-f0-9]{64}$/.test(value.output_revision ?? "")) {
+    throw new Error("Planning checkpoint contains an invalid output revision.");
   }
   return { ...value, comment_id: matches[0].id };
 }
@@ -110,6 +133,9 @@ async function fetchSnapshot(contract, repository, request) {
   const comments = await allPages(request, `${path}/comments?sort=created&direction=asc`);
   const output = existingPlanningOutput(issue.body ?? "");
   const checkpoint = parseCheckpoint(comments);
+  if (output && (!checkpoint || output.outputRevision !== checkpoint.output_revision)) {
+    throw new Error("Planning output does not match its trusted checkpoint.");
+  }
   const bodyRevision = sha256(issue.body ?? "");
   const sourceRevision = output?.sourceRevision ?? bodyRevision;
   if (checkpoint && checkpoint.source_revision !== sourceRevision) {
@@ -122,6 +148,7 @@ async function fetchSnapshot(contract, repository, request) {
     bodyRevision,
     sourceRevision,
     acceptanceCriteria: acceptanceCriteria(issue.body ?? ""),
+    existingDependencies: output ? [] : existingDependencies(issue.body ?? ""),
   };
 }
 
@@ -161,6 +188,19 @@ function validateSlice(value, acceptanceIds) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Planning proposal contains an invalid slice.");
   }
+  const expectedFields = [
+    "key",
+    "title",
+    "user_story",
+    "description",
+    "acceptance_criteria",
+    "out_of_scope",
+    "dependencies",
+  ];
+  if (Object.keys(value).length !== expectedFields.length ||
+    expectedFields.some((field) => !Object.hasOwn(value, field))) {
+    throw new Error("Planning slice does not match the supported schema.");
+  }
   const key = text(value.key, "slice key");
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(key)) {
     throw new Error("Planning slice keys must be stable lowercase identifiers.");
@@ -170,6 +210,8 @@ function validateSlice(value, acceptanceIds) {
   }
   const criteria = value.acceptance_criteria.map((criterion) => {
     if (!criterion || typeof criterion !== "object" || Array.isArray(criterion) ||
+      Object.keys(criterion).length !== 4 ||
+      ["source", "given", "when", "then"].some((field) => !Object.hasOwn(criterion, field)) ||
       !acceptanceIds.includes(criterion.source)) {
       throw new Error(`Planning slice ${key} references an unknown acceptance criterion.`);
     }
@@ -180,6 +222,15 @@ function validateSlice(value, acceptanceIds) {
       then: text(criterion.then, `${key} Then`),
     };
   });
+  const dependencies = (Array.isArray(value.dependencies)
+    ? value.dependencies
+    : (() => { throw new Error(`Planning slice ${key} has invalid dependencies.`); })())
+    .map((dependency) => validateDependency(dependency, `${key} dependencies`));
+  if (new Set(dependencies.map((dependency) =>
+    dependency.slice_key ? `slice:${dependency.slice_key}` : `issue:${dependency.issue_number}`)).size !==
+    dependencies.length) {
+    throw new Error(`Planning slice ${key} has duplicate dependencies.`);
+  }
   return {
     key,
     title: text(value.title, `${key} title`),
@@ -187,10 +238,7 @@ function validateSlice(value, acceptanceIds) {
     description: text(value.description, `${key} description`),
     acceptance_criteria: criteria,
     out_of_scope: stringList(value.out_of_scope, `${key} out of scope`),
-    dependencies: (Array.isArray(value.dependencies)
-      ? value.dependencies
-      : (() => { throw new Error(`Planning slice ${key} has invalid dependencies.`); })())
-      .map((dependency) => validateDependency(dependency, `${key} dependencies`)),
+    dependencies,
   };
 }
 
@@ -230,20 +278,31 @@ function verifyAcyclic(slices) {
 
 export function validatePlanningProposal(value, acceptanceIds) {
   if (!value || typeof value !== "object" || Array.isArray(value) ||
-    !["feature", "epic"].includes(value.decision)) {
+    !["feature", "epic"].includes(value.decision) ||
+    Object.keys(value).length !== 4 ||
+    ["decision", "rationale", "feature_dependencies", "slices"]
+      .some((field) => !Object.hasOwn(value, field))) {
     throw new Error("Planning output does not match the supported proposal schema.");
   }
   const rationale = text(value.rationale, "decision rationale");
   if (!Array.isArray(value.feature_dependencies) || !Array.isArray(value.slices)) {
     throw new Error("Planning proposal is missing dependency or slice arrays.");
   }
+  const featureDependencies = value.feature_dependencies.map((dependency) =>
+    validateDependency(dependency, "feature dependencies"));
+  if (featureDependencies.some((dependency) => !dependency.issue_number)) {
+    throw new Error("Feature dependencies must refer to existing issue numbers.");
+  }
+  if (new Set(featureDependencies.map((dependency) => dependency.issue_number)).size !==
+    featureDependencies.length) {
+    throw new Error("Planning feature has duplicate dependencies.");
+  }
   if (value.decision === "feature") {
     if (value.slices.length) throw new Error("A feature proposal cannot contain child slices.");
     return {
       decision: "feature",
       rationale,
-      feature_dependencies: value.feature_dependencies.map((dependency) =>
-        validateDependency(dependency, "feature dependencies")),
+      feature_dependencies: featureDependencies,
       slices: [],
     };
   }
@@ -383,7 +442,12 @@ function renderParentBody(body, proposal, parentNumber, repository, children) {
   if (proposal.decision === "feature") {
     const dependencies = proposal.feature_dependencies.map((dependency) =>
       `Depends on #${dependency.issue_number}`);
-    next = replaceSection(body, "Dependencies", dependencies.length ? dependencies.join("\n") : "- None.");
+    const context = sectionLines(body, "Dependencies")
+      .filter((line) =>
+        !/^Depends on #\d+$/.test(line.trim()) &&
+        !/^-\s+None(?: identified)?\.?$/i.test(line.trim()));
+    next = replaceSection(body, "Dependencies",
+      [...context, ...(dependencies.length ? dependencies : ["- None."])].join("\n").trim());
   } else {
     const [owner, repo] = repository.split("/");
     const links = proposal.slices.map((slice, index) => {
@@ -405,10 +469,11 @@ function renderParentBody(body, proposal, parentNumber, repository, children) {
   return next;
 }
 
-async function saveCheckpoint(path, checkpoint, request) {
+async function saveCheckpoint(path, repository, checkpoint, request) {
   const body = `${CHECKPOINT_MARKER}\n${JSON.stringify({
     schema_version: 1,
     source_revision: checkpoint.source_revision,
+    output_revision: checkpoint.output_revision ?? null,
     proposal: checkpoint.proposal,
     slice_ids: checkpoint.slice_ids,
     completed: checkpoint.completed,
@@ -417,16 +482,19 @@ async function saveCheckpoint(path, checkpoint, request) {
     throw new Error("Planning checkpoint exceeds the safe GitHub comment size.");
   }
   const response = checkpoint.comment_id
-    ? await request(`/repos/${path.split("/")[2]}/${path.split("/")[3]}/issues/comments/${checkpoint.comment_id}`, "PATCH", { body })
+    ? await request(`/repos/${repository}/issues/comments/${checkpoint.comment_id}`, "PATCH", { body })
     : await request(`${path}/comments`, "POST", { body });
   if (!checkpoint.comment_id) checkpoint.comment_id = response.data?.id;
 }
 
-async function findExistingSlice(key, parentNumber, repository, request, allIssues) {
+async function findExistingSlice(key, parentNumber, allIssues) {
   const marker = sliceMarker(key, parentNumber);
-  const issue = allIssues.find((item) =>
+  const matches = allIssues.filter((item) =>
     !item.pull_request && item.body?.includes(marker) && isTrustedFactoryActor(item.user));
-  return issue ?? null;
+  if (matches.length > 1) {
+    throw new Error(`Multiple issues claim the stable key for slice ${key}.`);
+  }
+  return matches[0] ?? null;
 }
 
 async function loadIssue(number, repository, request) {
@@ -444,7 +512,7 @@ async function createOrResumeChildren(snapshot, checkpoint, repository, request)
     if (child && (!isTrustedFactoryActor(child.user) || !child.body?.includes(marker))) {
       throw new Error(`Checkpoint for slice ${slice.key} does not point to its created issue.`);
     }
-    if (!child) child = await findExistingSlice(slice.key, parentNumber, repository, request, allIssues);
+    if (!child) child = await findExistingSlice(slice.key, parentNumber, allIssues);
     if (!child) {
       const created = await request(`/repos/${repository}/issues`, "POST", {
         title: slice.title,
@@ -453,11 +521,12 @@ async function createOrResumeChildren(snapshot, checkpoint, repository, request)
       child = created.data;
       if (!Number.isSafeInteger(child?.number)) throw new Error(`Could not create slice ${slice.key}.`);
     }
+    if (child.state !== "open") throw new Error(`The created issue for slice ${slice.key} is no longer open.`);
     if (child.title !== slice.title) {
       throw new Error(`The created issue for slice ${slice.key} has a different title.`);
     }
     checkpoint.slice_ids[slice.key] = child.number;
-    await saveCheckpoint(issuePath(repository, parentNumber), checkpoint, request);
+    await saveCheckpoint(issuePath(repository, parentNumber), repository, checkpoint, request);
   }
 }
 
@@ -560,6 +629,7 @@ export async function publishPlanning({ contract, repository, artifact, request 
   const path = issuePath(repository, contract.resource.number);
   const comments = snapshot.comments;
   let checkpoint = snapshot.checkpoint;
+  let newCheckpoint = false;
   if (checkpoint && checkpoint.source_revision !== snapshot.sourceRevision) {
     throw new Error("Planning input changed after an incomplete run.");
   }
@@ -568,22 +638,48 @@ export async function publishPlanning({ contract, repository, artifact, request 
     proposal = validatePlanningProposal(checkpoint.proposal, snapshot.acceptanceCriteria);
   } else {
     proposal = validatePlanningProposal(artifact.proposal, snapshot.acceptanceCriteria);
+    if (proposal.decision === "feature") {
+      const dependencies = new Set(proposal.feature_dependencies.map((dependency) => dependency.issue_number));
+      for (const number of snapshot.existingDependencies) dependencies.add(number);
+      proposal.feature_dependencies = [...dependencies].map((issue_number) => ({ issue_number }));
+    } else {
+      const referenced = new Set(proposal.slices.flatMap((slice) => slice.dependencies
+        .filter((dependency) => dependency.issue_number)
+        .map((dependency) => dependency.issue_number)));
+      const missing = snapshot.existingDependencies.filter((number) => !referenced.has(number));
+      if (missing.length) {
+        throw new Error(`Epic slices omit existing dependencies: ${missing.map((number) => `#${number}`).join(", ")}.`);
+      }
+    }
     checkpoint = {
       schema_version: 1,
       source_revision: snapshot.sourceRevision,
       proposal,
       slice_ids: {},
+      output_revision: null,
       completed: {},
       comment_id: null,
     };
-    await saveCheckpoint(path, checkpoint, request);
+    newCheckpoint = true;
   }
 
-  const dependencies = dependencyNumbers(proposal, checkpoint);
-  await verifyDependencyIssues(dependencies, snapshot.issue.number, repository, request);
+  const externalDependencies = proposal.decision === "feature"
+    ? dependencyNumbers(proposal, checkpoint)
+    : proposal.slices.flatMap((slice) => slice.dependencies
+      .filter((dependency) => dependency.issue_number)
+      .map((dependency) => dependency.issue_number));
+  await verifyDependencyIssues(externalDependencies.map((issue_number) => ({ issue_number })),
+    snapshot.issue.number, repository, request);
+  if (newCheckpoint) await saveCheckpoint(path, repository, checkpoint, request);
   const children = new Map();
   if (proposal.decision === "epic") {
     await createOrResumeChildren(snapshot, checkpoint, repository, request);
+    const childNumbers = new Set(Object.values(checkpoint.slice_ids));
+    if (proposal.slices.some((slice) =>
+      slice.dependencies.some((dependency) =>
+        dependency.issue_number && childNumbers.has(dependency.issue_number)))) {
+      throw new Error("Dependencies on slices must use their stable slice keys.");
+    }
     for (const slice of proposal.slices) {
       const child = await loadIssue(checkpoint.slice_ids[slice.key], repository, request);
       const depIds = await resolveSliceDependencies(slice, checkpoint);
@@ -619,8 +715,20 @@ export async function publishPlanning({ contract, repository, artifact, request 
     label.name.startsWith("stage:")).map((label) => label.name).join() !== "stage:planning") {
     throw new Error("Issue left stage:planning before its contracts were complete.");
   }
+  const priorOutput = existingPlanningOutput(latestParent.body ?? "");
+  if ((priorOutput && priorOutput.sourceRevision !== snapshot.sourceRevision) ||
+    (!priorOutput && sha256(latestParent.body ?? "") !== snapshot.sourceRevision)) {
+    throw new Error("Planning input changed before issue contracts were complete.");
+  }
   const parentBody = renderParentBody(latestParent.body ?? "", proposal,
     latestParent.number, repository, children);
+  const plannedOutput = existingPlanningOutput(parentBody);
+  if (!plannedOutput || (checkpoint.output_revision &&
+    checkpoint.output_revision !== plannedOutput.outputRevision)) {
+    throw new Error("Planning output does not match its checkpoint.");
+  }
+  checkpoint.output_revision = plannedOutput.outputRevision;
+  await saveCheckpoint(path, repository, checkpoint, request);
   if (latestParent.body !== parentBody) await request(path, "PATCH", { body: parentBody });
   const updatedParent = (await request(path)).data;
   const output = existingPlanningOutput(updatedParent.body ?? "");
@@ -641,21 +749,23 @@ export async function publishPlanning({ contract, repository, artifact, request 
     const repoInfo = (await request(`/repos/${repository}`)).data;
     if (!repoInfo?.default_branch) throw new Error("Could not resolve the repository default branch.");
     for (const slice of proposal.slices) {
-      await dispatchIssue(checkpoint.slice_ids[slice.key], repoInfo.default_branch, repository, request);
+      if (!slice.dependencies.length) {
+        await dispatchIssue(checkpoint.slice_ids[slice.key], repoInfo.default_branch, repository, request);
+      }
     }
+  }
+
+  checkpoint.completed = { contracts: true, dispatches: proposal.decision === "epic" };
+  await saveCheckpoint(path, repository, checkpoint, request);
+  if (proposal.decision === "epic") {
+    const updated = (await request(path)).data;
+    await setLabels(path, updated, "epic", null, request);
   } else {
     const updated = (await request(path)).data;
     await setLabels(path, updated, "feature",
       proposal.feature_dependencies.length ? "stage:blocked" : "stage:design", request);
   }
-
-  if (proposal.decision === "epic") {
-    const updated = (await request(path)).data;
-    await setLabels(path, updated, "epic", null, request);
-  }
-  checkpoint.completed = { contracts: true, dispatches: proposal.decision === "epic" };
-  await saveCheckpoint(path, checkpoint, request);
-  return { decision: proposal.decision, children: [...checkpoint.slice_ids] };
+  return { decision: proposal.decision, children: Object.entries(checkpoint.slice_ids) };
 }
 
 async function request(path, method = "GET", body) {
