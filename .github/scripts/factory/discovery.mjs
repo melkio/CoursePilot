@@ -89,6 +89,13 @@ export function buildDiscoveryPrompt(analystPrompt, issue, comments) {
   ].join("\n\n");
 }
 
+export function copilotEnvironment(environment, token) {
+  const result = { ...environment, COPILOT_GITHUB_TOKEN: token };
+  delete result.GITHUB_TOKEN;
+  delete result.GH_TOKEN;
+  return result;
+}
+
 function validateAnalystResponse(answer) {
   if (typeof answer !== "string" || !answer.trim() || /<!--\s*factory:/i.test(answer)) {
     throw new Error("Copilot CLI returned an empty or invalid analyst response.");
@@ -148,7 +155,7 @@ async function runCopilot(prompt) {
     "--no-ask-user",
     "-s",
   ], {
-    env: { ...process.env, COPILOT_GITHUB_TOKEN: token },
+    env: copilotEnvironment(process.env, token),
     encoding: "utf8",
     maxBuffer: 1_000_000,
     timeout: 8 * 60 * 1000,
