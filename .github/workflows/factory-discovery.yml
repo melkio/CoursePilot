@@ -73,10 +73,11 @@ jobs:
       - name: Transfer generated response to publisher
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: factory-discovery-response-${{ github.run_id }}-${{ github.run_attempt }}
+          name: factory-discovery-response-${{ github.run_id }}
           path: ${{ runner.temp }}/factory-analyst-response.md
           if-no-files-found: error
           retention-days: 1
+          overwrite: true
 
   publish:
     needs: [start, infer]
@@ -102,7 +103,7 @@ jobs:
         if: needs.infer.result == 'success'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: factory-discovery-response-${{ github.run_id }}-${{ github.run_attempt }}
+          name: factory-discovery-response-${{ github.run_id }}
           path: ${{ runner.temp }}
       - name: Verify state before publication
         id: verify
