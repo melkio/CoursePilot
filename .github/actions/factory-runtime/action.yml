@@ -1,0 +1,26 @@
+name: Factory runtime
+description: Validate factory contracts, recheck current GitHub state, and persist checkpoints.
+inputs:
+  operation:
+    description: Runtime operation (start, verify, result, or next).
+    required: true
+  contract:
+    description: Versioned JSON contract supplied by the dispatcher.
+    required: true
+outputs:
+  should-skip:
+    description: True when this idempotency key is already active or completed.
+    value: ${{ steps.runtime.outputs.should_skip }}
+runs:
+  using: composite
+  steps:
+    - name: Run trusted factory runtime
+      id: runtime
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_API_URL: ${{ github.api_url }}
+        FACTORY_OPERATION: ${{ inputs.operation }}
+        FACTORY_CONTRACT: ${{ inputs.contract }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/factory/runtime.mjs"

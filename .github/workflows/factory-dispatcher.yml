@@ -1,0 +1,63 @@
+name: Factory dispatcher
+
+on:
+  issues:
+    types: [opened, labeled, closed, reopened]
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, closed]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      resource_number:
+        description: Optional issue or PR number to reconcile (empty scans all active resources)
+        required: false
+        type: string
+      internal:
+        description: Internal per-resource reconciliation request
+        required: false
+        default: "false"
+        type: string
+      initialize_only:
+        description: Seed durable cursors without dispatching any step
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+jobs:
+  dispatch:
+    if: >-
+      (vars.FACTORY_AUTOMATION_ENABLED == 'true' ||
+       (github.event_name == 'workflow_dispatch' &&
+        github.actor == 'melkio' &&
+        inputs.internal != 'true')) &&
+      (github.event_name != 'workflow_dispatch' ||
+       github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: factory-resource-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number || inputs.resource_number || 'sweep' }}
+      cancel-in-progress: false
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Reconcile and dispatch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/factory/dispatcher.mjs

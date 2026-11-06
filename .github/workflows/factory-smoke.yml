@@ -1,0 +1,90 @@
+name: Factory runtime smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Open issue authored by melkio for the controlled smoke output
+        required: true
+        type: string
+      model:
+        description: Copilot CLI model to verify (no fallback)
+        required: true
+        type: choice
+        options:
+          - gpt-6.1-sol
+          - gpt-6.1-terra
+          - claude-opus-5.5
+
+permissions: {}
+
+jobs:
+  infer:
+    if: github.actor == 'melkio' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      ok: ${{ steps.smoke.outputs.ok }}
+    steps:
+      - name: Require a supported Copilot token
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$COPILOT_GITHUB_TOKEN" ]; then
+            echo "::error::Set the dedicated COPILOT_GITHUB_TOKEN secret."
+            exit 1
+          fi
+          case "$COPILOT_GITHUB_TOKEN" in
+            github_pat_*|ghu_*|gho_*) ;;
+            *) echo "::error::Use a supported fine-grained PAT with Copilot Requests, GitHub App user token, or Copilot CLI OAuth token."; exit 1 ;;
+          esac
+      - name: Install pinned Copilot CLI
+        run: |
+          set -euo pipefail
+          npm install --global @github/copilot@1.0.106
+      - name: Verify authentication and selected model
+        id: smoke
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          COPILOT_MODEL: ${{ inputs.model }}
+        run: |
+          set -euo pipefail
+          version_output="$(copilot version)"
+          echo "$version_output"
+          case "$version_output" in
+            *1.0.106*) ;;
+            *) echo "::error::Expected Copilot CLI v1.0.106."; exit 1 ;;
+          esac
+          prompt='Return a short harmless greeting. Do not use tools.'
+          output="$(copilot -p "$prompt" --model "$COPILOT_MODEL" --no-ask-user -s)"
+          if [ -z "$output" ]; then
+            echo "::error::Copilot CLI returned no response; no output was published."
+            exit 1
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+          printf '## Factory runtime smoke test\n\n- Run: `%s`\n- Model: `%s`\n- CLI: `v1.0.106`\n- Published text: fixed smoke marker only.\n' \
+            "$GITHUB_RUN_ID" "$COPILOT_MODEL" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: infer
+    if: needs.infer.outputs.ok == 'true' && github.actor == 'melkio' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Publish fixed smoke result
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FACTORY_SMOKE_ISSUE: ${{ inputs.issue_number }}
+          COPILOT_CLI_VERSION: v1.0.106
+          COPILOT_MODEL: ${{ inputs.model }}
+        run: node .github/scripts/factory/publish-smoke.mjs
