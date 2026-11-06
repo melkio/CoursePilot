@@ -13,7 +13,9 @@ import {
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 100;
+const MAX_BODY_BYTES = 60_000;
 const ANALYST_MARKER = "<!-- factory:analyst -->";
+const STATE_MARKER = "<!-- factory-state:v1 -->";
 const OUTPUT_MARKER = "<!-- factory:functional-consolidation:v1";
 const COMMENT_MARKER = "<!-- factory:functional-consolidation-comment:v1";
 const BLOCKED_MARKER = "<!-- factory:functional-consolidation-blocked:v1";
@@ -48,14 +50,20 @@ async function allPages(request, path) {
 }
 
 function isConsolidationComment(comment) {
-  return comment.body?.includes(COMMENT_MARKER) ||
-    comment.body?.includes(BLOCKED_MARKER);
+  return isTrustedFactoryActor(comment.user) &&
+    (comment.body?.includes(COMMENT_MARKER) ||
+      comment.body?.includes(BLOCKED_MARKER));
+}
+
+function isCheckpointComment(comment) {
+  return isTrustedFactoryActor(comment.user) &&
+    comment.body?.startsWith(`${STATE_MARKER}\n`);
 }
 
 function conversationRevision(comments) {
   return sha256(JSON.stringify(comments
     .filter((comment) =>
-      !comment.body?.startsWith("<!-- factory-state:v1 -->") &&
+      !isCheckpointComment(comment) &&
       !isConsolidationComment(comment))
     .map((comment) => ({
       id: comment.id,
@@ -64,6 +72,22 @@ function conversationRevision(comments) {
       body: comment.body ?? "",
       updated_at: comment.updated_at ?? "",
     }))));
+}
+
+function hasStaleConsolidationCheckpoint(comments, bodyRevision) {
+  return comments.some((comment) => {
+    if (!isCheckpointComment(comment)) return false;
+    try {
+      const state = JSON.parse(comment.body.slice(STATE_MARKER.length).trim());
+      return state.entries?.some((entry) =>
+        entry.step === "functional-consolidation" &&
+        (entry.status === "completed" ||
+          (["failed", "blocked"].includes(entry.status) &&
+            entry.contract?.expected?.state_revision !== bodyRevision)));
+    } catch {
+      return false;
+    }
+  });
 }
 
 async function assertCurrentApproval(contract, issue, repository, request, allowBodyChange = false) {
@@ -96,10 +120,15 @@ async function fetchSnapshot(contract, repository, request, allowBodyChange = fa
   const issue = (await request(path)).data;
   await assertCurrentApproval(contract, issue, repository, request, allowBodyChange);
   const comments = await allPages(request, `${path}/comments?sort=created&direction=asc`);
+  const bodyRevision = sha256(issue.body ?? "");
+  const priorOutput = existingOutput(issue.body ?? "");
+  if (!priorOutput && hasStaleConsolidationCheckpoint(comments, bodyRevision)) {
+    throw new Error("Issue body changed after an incomplete consolidation; refusing to overwrite it.");
+  }
   const discussion = comments
     .filter((comment) => isAuthorizedActor(comment.user) || isTrustedFactoryActor(comment.user))
     .filter((comment) =>
-      !comment.body?.startsWith("<!-- factory-state:v1 -->") &&
+      !isCheckpointComment(comment) &&
       !isConsolidationComment(comment))
     .sort((left, right) =>
       Date.parse(left.created_at ?? "") - Date.parse(right.created_at ?? "") ||
@@ -112,10 +141,48 @@ async function fetchSnapshot(contract, repository, request, allowBodyChange = fa
     }));
   return {
     issue: { title: issue.title ?? "", body: issue.body ?? "" },
-    bodyRevision: sha256(issue.body ?? ""),
+    bodyRevision,
     conversationRevision: conversationRevision(comments),
     comments: discussion,
   };
+}
+
+async function verifyFreshState(
+  contract,
+  repository,
+  request,
+  expectedBody,
+  expectedConversationRevision,
+  allowBodyChange = false,
+) {
+  const path = issuePath(repository, contract.resource.number);
+  const comments = await allPages(request, `${path}/comments?sort=created&direction=asc`);
+  if (conversationRevision(comments) !== expectedConversationRevision) {
+    throw new Error("Approved conversation changed before the issue update.");
+  }
+  const events = await allPages(request, `${path}/timeline`);
+  const latest = events
+    .filter((event) =>
+      ["labeled", "unlabeled"].includes(event.event) &&
+      event.label?.name === "stage:discovery-approved")
+    .sort((left, right) =>
+      Date.parse(left.created_at ?? "") - Date.parse(right.created_at ?? "") ||
+      (left.id ?? 0) - (right.id ?? 0))
+    .at(-1);
+  if (latest?.event !== "labeled" ||
+    !isAuthorizedActor(latest.actor ?? latest.user)) {
+    throw new Error("The current discovery approval was not applied by melkio.");
+  }
+  const issue = (await request(path)).data;
+  const stages = issue.labels?.filter((label) => label.name.startsWith("stage:")) ?? [];
+  if (issue.state !== "open" ||
+    issue.body !== expectedBody ||
+    stages.length !== 1 ||
+    stages[0].name !== "stage:discovery-approved" ||
+    (!allowBodyChange && !resourceMatchesContract(contract, issue, repository))) {
+    throw new Error("Issue body or approval changed before the issue update.");
+  }
+  return issue;
 }
 
 export async function fetchFunctionalConsolidationInput(
@@ -142,7 +209,8 @@ function existingOutput(body) {
 }
 
 function requiredText(value, field) {
-  if (typeof value !== "string" || !value.trim() || /^#{1,2}\s/.test(value)) {
+  if (typeof value !== "string" || !value.trim() ||
+    value.split("\n").some((line) => /^#{1,2}\s/.test(line))) {
     throw new Error(`Functional specification has an invalid ${field}.`);
   }
   return value.trim();
@@ -315,8 +383,12 @@ function splitBody(body) {
 
 export function renderFunctionalConsolidation(body, specification, sourceRevision, conversationRevision) {
   const { preamble, sections } = splitBody(body);
-  const previousOriginal = sections.find((section) => section.title.toLowerCase() === "original request");
-  const original = stripDetails(previousOriginal?.lines.join("\n") || preamble);
+  const previousOriginals = sections
+    .filter((section) => section.title.toLowerCase() === "original request")
+    .map((section) => stripDetails(section.lines.join("\n")));
+  const original = [...new Set([...previousOriginals, preamble].filter(Boolean))]
+    .join("\n\n")
+    .trim();
   if (!original) throw new Error("Cannot consolidate an issue without an original request.");
   const unrelatedSections = sections
     .filter((section) =>
@@ -384,7 +456,11 @@ export function renderFunctionalConsolidation(body, specification, sourceRevisio
     ...unrelatedSections.flatMap((section) => ["", section]),
   ].join("\n");
   const outputRevision = sha256(rendered);
-  return rendered.replace(marker, `${markerPrefix}${outputRevision}${markerTail}`);
+  const result = rendered.replace(marker, `${markerPrefix}${outputRevision}${markerTail}`);
+  if (Buffer.byteLength(result, "utf8") > MAX_BODY_BYTES) {
+    throw new Error("Consolidated issue body exceeds the safe GitHub issue size limit.");
+  }
+  return result;
 }
 
 function validateArtifact(artifact, contract) {
@@ -416,7 +492,7 @@ export async function publishFunctionalConsolidation({
 }) {
   assertContract(contract, repository);
   validateArtifact(artifact, contract);
-  let snapshot = await fetchSnapshot(contract, repository, request);
+  const snapshot = await fetchSnapshot(contract, repository, request);
   if (snapshot.bodyRevision !== artifact.snapshot.body_revision ||
     snapshot.conversationRevision !== artifact.snapshot.conversation_revision) {
     throw new Error("Issue body or approved conversation changed during consolidation.");
@@ -430,6 +506,13 @@ export async function publishFunctionalConsolidation({
       questions.some((question) => typeof question !== "string" || !question.trim())) {
       throw new Error("Blocked consolidation has no valid blocking questions.");
     }
+    await verifyFreshState(
+      contract,
+      repository,
+      request,
+      snapshot.issue.body,
+      snapshot.conversationRevision,
+    );
     const marker = `${BLOCKED_MARKER} key=${contract.checkpoint.key} -->`;
     await addCommentOnce(
       path,
@@ -465,25 +548,25 @@ export async function publishFunctionalConsolidation({
     }
   }
 
+  await verifyFreshState(
+    contract,
+    repository,
+    request,
+    snapshot.issue.body,
+    snapshot.conversationRevision,
+  );
   if (artifact.kind === "specification") {
     await request(path, "PATCH", { body });
   }
 
-  snapshot = await fetchSnapshot(
+  await verifyFreshState(
     contract,
     repository,
     request,
-    artifact.kind === "specification",
+    body,
+    artifact.snapshot.conversation_revision,
+    true,
   );
-  const issueAfterBody = (await request(path)).data;
-  if (issueAfterBody.body !== body ||
-    sha256(issueAfterBody.body) !== sha256(body) ||
-    !issueAfterBody.labels?.some((label) => label.name === "stage:discovery-approved")) {
-    throw new Error("Issue body or approval changed before the phase transition.");
-  }
-  if (snapshot.conversationRevision !== artifact.snapshot.conversation_revision) {
-    throw new Error("Approved conversation changed before the phase transition.");
-  }
 
   const outputMarker = /^<!-- factory:functional-consolidation:v1 output=([a-f0-9]{64}) /m.exec(body);
   if (!outputMarker) throw new Error("Consolidated specification marker is missing.");
@@ -497,13 +580,14 @@ export async function publishFunctionalConsolidation({
     allComments,
   );
 
-  const beforeTransition = (await request(path)).data;
-  const finalSnapshot = await fetchSnapshot(contract, repository, request, true);
-  if (beforeTransition.body !== body ||
-    finalSnapshot.conversationRevision !== artifact.snapshot.conversation_revision ||
-    !beforeTransition.labels?.some((label) => label.name === "stage:discovery-approved")) {
-    throw new Error("Issue changed before applying the planning stage.");
-  }
+  const beforeTransition = await verifyFreshState(
+    contract,
+    repository,
+    request,
+    body,
+    artifact.snapshot.conversation_revision,
+    true,
+  );
   const labels = (beforeTransition.labels ?? [])
     .map((label) => label.name)
     .filter((name) => !name.startsWith("stage:"));

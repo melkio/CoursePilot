@@ -121,7 +121,12 @@ function specification(overrides = {}) {
   };
 }
 
-async function generate(api, contract = contractFor(api.issueValue), answer = specification()) {
+async function generate(
+  api,
+  contract = contractFor(api.issueValue),
+  answer = specification(),
+  runCopilot = async () => JSON.stringify(answer),
+) {
   let prompt;
   const artifact = await generateFunctionalConsolidation({
     contract,
@@ -130,7 +135,7 @@ async function generate(api, contract = contractFor(api.issueValue), answer = sp
     analystPrompt: "# Analyst\nConsolidate the approved discovery.",
     runCopilot: async (value) => {
       prompt = value;
-      return JSON.stringify(answer);
+      return runCopilot(value);
     },
   });
   return { artifact, contract, prompt };
@@ -240,7 +245,7 @@ test("AC4: refuses a changed body, new human input, or revoked approval", async 
   changedDiscussionApi.comments.push({
     ...ownerComment,
     id: 62,
-    body: "A new decision arrived.",
+    body: "<!-- factory:functional-consolidation-comment:v1 copied marker -->\nA new decision arrived.",
     html_url: "https://github.com/melkio/CoursePilot/issues/55#issuecomment-62",
   });
   await assert.rejects(publishFunctionalConsolidation({
@@ -283,6 +288,21 @@ test("AC5: blocks unauthorized approval, incomplete output, and indispensable un
   assert.equal(blockedApi.issueValue.labels[0].name, "stage:discovery-approved");
   assert.match(blockedApi.comments.at(-1).body, /<!-- factory:analyst -->/);
 
+  const staleStateApi = apiFor({
+    comments: [{
+      id: 80,
+      body: `<!-- factory-state:v1 -->\n${JSON.stringify({
+        entries: [{
+          step: "functional-consolidation",
+          status: "failed",
+          contract: { expected: { state_revision: "0".repeat(64) } },
+        }],
+      })}`,
+      user: bot,
+    }, ownerComment],
+  });
+  await assert.rejects(generate(staleStateApi), /changed after an incomplete consolidation/);
+
   const failingApi = apiFor();
   const failingContract = contractFor(failingApi.issueValue);
   await assert.rejects(generateFunctionalConsolidation({
@@ -292,4 +312,7 @@ test("AC5: blocks unauthorized approval, incomplete output, and indispensable un
     analystPrompt: "# Analyst",
     runCopilot: async () => "unused",
   }), /simulated API failure/);
+  await assert.rejects(generate(failingApi, undefined, specification(), async () => {
+    throw new Error("simulated CLI failure");
+  }), /simulated CLI failure/);
 });
