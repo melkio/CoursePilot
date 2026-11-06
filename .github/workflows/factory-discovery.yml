@@ -1,0 +1,140 @@
+name: Factory discovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      contract:
+        description: Versioned factory contract from the dispatcher
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: factory-resource-${{ github.repository }}-${{ fromJSON(inputs.contract).resource.number }}
+  cancel-in-progress: false
+
+jobs:
+  start:
+    if: >-
+      (github.actor == 'melkio' || github.actor == 'github-actions[bot]') &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      should-skip: ${{ steps.runtime.outputs.should-skip }}
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Start discovery checkpoint
+        id: runtime
+        uses: ./.github/actions/factory-runtime
+        with:
+          operation: start
+          contract: ${{ inputs.contract }}
+
+  infer:
+    needs: start
+    if: needs.start.result == 'success' && needs.start.outputs.should-skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Verify active checkpoint
+        uses: ./.github/actions/factory-runtime
+        with:
+          operation: verify
+          contract: ${{ inputs.contract }}
+      - name: Install pinned Copilot CLI
+        run: npm install --global @github/copilot@1.0.106
+      - name: Generate functional interview response
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          FACTORY_CONTRACT: ${{ inputs.contract }}
+          FACTORY_DISCOVERY_OPERATION: infer
+          FACTORY_RESPONSE_PATH: ${{ runner.temp }}/factory-analyst-response.md
+        run: node .github/scripts/factory/discovery.mjs
+      - name: Transfer generated response to publisher
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: factory-discovery-response-${{ github.run_id }}
+          path: ${{ runner.temp }}/factory-analyst-response.md
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  publish:
+    needs: [start, infer]
+    if: >-
+      always() &&
+      needs.start.result == 'success' &&
+      needs.start.outputs.should-skip != 'true' &&
+      (github.actor == 'melkio' || github.actor == 'github-actions[bot]') &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Download generated response
+        if: needs.infer.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: factory-discovery-response-${{ github.run_id }}
+          path: ${{ runner.temp }}
+      - name: Verify state before publication
+        id: verify
+        if: needs.infer.result == 'success'
+        uses: ./.github/actions/factory-runtime
+        with:
+          operation: verify
+          contract: ${{ inputs.contract }}
+      - name: Publish analyst response
+        id: publish
+        if: needs.infer.result == 'success' && steps.verify.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          FACTORY_CONTRACT: ${{ inputs.contract }}
+          FACTORY_DISCOVERY_OPERATION: publish
+          FACTORY_RESPONSE_PATH: ${{ runner.temp }}/factory-analyst-response.md
+        run: node .github/scripts/factory/discovery.mjs
+      - name: Record discovery result
+        id: result
+        if: always()
+        env:
+          FACTORY_RESULT: ${{ needs.infer.result == 'success' && steps.verify.outcome == 'success' && steps.publish.outcome == 'success' && 'completed' || 'failed' }}
+        uses: ./.github/actions/factory-runtime
+        with:
+          operation: result
+          contract: ${{ inputs.contract }}
+      - name: Continue factory reconciliation
+        if: steps.result.outcome == 'success' && needs.infer.result == 'success' && steps.publish.outcome == 'success'
+        uses: ./.github/actions/factory-runtime
+        with:
+          operation: next
+          contract: ${{ inputs.contract }}

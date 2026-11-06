@@ -108,6 +108,22 @@ può essere pubblicato come corrente. `start` espone `should-skip=true` se quell
 il workflow deve saltare gli effetti. Retry e replay riusano la stessa chiave, quindi i publisher di ogni step devono essere
 idempotenti. Non registrare prompt, commenti, diff o token nei log/summary.
 
+### Discovery
+
+`stage:discovery` avvia `.github/workflows/factory-discovery.yml` dal dispatcher; è possibile anche avviarlo
+manualmente dal default branch fornendo il contratto condiviso. Il workflow rilegge l'issue e la conversazione
+completa, paginata da GitHub, e carica `.factory/analyst.md` dal default branch trusted. La risposta viene pubblicata
+solo come commento `<!-- factory:analyst -->`: body e label non vengono modificati e l'approvazione resta manuale.
+Il testo passa al publisher tramite un artifact Actions con retention di un giorno; il job di inferenza non ha
+permessi di scrittura.
+
+Per rispondere, aggiungere **un nuovo commento** mentre la issue conserva `stage:discovery`; editare un commento non
+riavvia l'intervista. Il dispatcher esclude PR, bot e autori non autorizzati. La concorrenza per risorsa serializza
+le esecuzioni; commenti umani arrivati durante un run restano nel checkpoint e vengono processati al termine.
+Errori CLI/API lasciano il checkpoint `failed`, senza commento di successo; dopo aver corretto il problema, riprendere
+dal dispatcher manuale indicando il numero della issue. L'analyst invita l'owner ad applicare
+`stage:discovery-approved` quando i criteri sono testabili, ma non applica la label né consolida il body.
+
 ### Permessi e secret
 
 | Job | Permessi GitHub | Secret |
