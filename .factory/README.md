@@ -124,6 +124,22 @@ Errori CLI/API lasciano il checkpoint `failed`, senza commento di successo; dopo
 dal dispatcher manuale indicando il numero della issue. L'analyst invita l'owner ad applicare
 `stage:discovery-approved` quando i criteri sono testabili, ma non applica la label né consolida il body.
 
+### Consolidamento funzionale
+
+`stage:discovery-approved`, applicata da `melkio`, avvia `.github/workflows/factory-functional-consolidation.yml`.
+L'Analyst legge il body e la conversazione paginata completa, produce una struttura JSON validata e il publisher
+renderizza in modo deterministico `Original request` (una sola volta, in `<details>`) e `Functional specification`.
+Il log delle decisioni può citare solo commenti dell'owner con URL GitHub stabili. Domande indispensabili ancora
+aperte generano un commento `<!-- factory:analyst -->` visibile all'owner e bloccano la transizione.
+
+Il publisher verifica di nuovo body, conversazione e autore dell'approvazione prima di scrivere e prima di applicare
+`stage:planning`. Conserva gli altri label e le sezioni del body estranee alla specifica. Un marker con digest del
+risultato rende riconoscibile una scrittura completata: un retry senza nuovi cambiamenti riprende dalla transizione
+mancante, mentre modifiche del body, nuovi commenti o revoca dell'approvazione bloccano il risultato obsoleto.
+Dopo aver verificato il body e impostato la sola fase `stage:planning`, il workflow richiama esplicitamente il
+passo successivo tramite `factory-runtime` (`next`); il dispatch REST usa `GITHUB_TOKEN`, non dipende da un webhook.
+Errori e output incompleti lasciano il checkpoint `failed`/`blocked` e sono riprendibili dal dispatcher manuale.
+
 ### Permessi e secret
 
 | Job | Permessi GitHub | Secret |
