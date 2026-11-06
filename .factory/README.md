@@ -114,6 +114,8 @@ idempotenti. Non registrare prompt, commenti, diff o token nei log/summary.
 manualmente dal default branch fornendo il contratto condiviso. Il workflow rilegge l'issue e la conversazione
 completa, paginata da GitHub, e carica `.factory/analyst.md` dal default branch trusted. La risposta viene pubblicata
 solo come commento `<!-- factory:analyst -->`: body e label non vengono modificati e l'approvazione resta manuale.
+Il testo passa al publisher tramite un artifact Actions con retention di un giorno; il job di inferenza non ha
+permessi di scrittura.
 
 Per rispondere, aggiungere **un nuovo commento** mentre la issue conserva `stage:discovery`; editare un commento non
 riavvia l'intervista. Il dispatcher esclude PR, bot e autori non autorizzati. La concorrenza per risorsa serializza
